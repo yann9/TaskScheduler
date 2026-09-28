@@ -202,6 +202,31 @@ namespace TaskScheduler.Engine
         }
 
         /// <summary>
+        /// 由界面进程转发而来的交互会话系统事件（锁屏 / 解锁 / 远程桌面连接 / 断开等）。
+        ///
+        /// 为什么需要它：服务运行在 session 0，没有交互桌面，<see cref="Triggers.SystemEventTrigger"/>
+        /// 在服务进程里订阅的 <c>SystemEvents.SessionSwitch</c> 根本不会触发 —— 那些事件只发往
+        /// 交互会话里的窗口。于是改由"待在交互会话里的 UI 进程"感知这些事件，再通过管道转发到这里，
+        /// 本方法找出所有匹配该事件类型、且已启用的任务并触发它们，等价于引擎自己监听到该事件。
+        ///
+        /// 本地托管模式下引擎就在交互会话里，触发器自行订阅，不会走这条路径（也不会双触发）。
+        /// </summary>
+        /// <param name="ev">事件类型（对应 SystemEventTrigger.EventType）</param>
+        public void InjectSystemEvent(SystemEventType ev)
+        {
+            List<AutomationTask> matches;
+            lock (_lock)
+            {
+                matches = _tasks.Where(t =>
+                    t.Enabled && t.Trigger is Triggers.SystemEventTrigger st && st.EventType == ev).ToList();
+            }
+
+            Log.Write($"[系统事件] 收到界面转发：{ev}，命中 {matches.Count} 个任务");
+            foreach (var t in matches)
+                _ = RunTaskAsync(t, "系统事件（界面转发）：" + ev);
+        }
+
+        /// <summary>
         /// 立即执行某个任务（手动或触发器触发入口）。
         ///
         /// 所有调用点都是 fire-and-forget（触发器回调、手动执行、错过补偿），

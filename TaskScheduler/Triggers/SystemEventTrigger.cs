@@ -81,6 +81,14 @@ namespace TaskScheduler.Triggers
                     case SystemEventType.Unlock:
                     case SystemEventType.RemoteConnect:
                     case SystemEventType.RemoteDisconnect:
+                        // 服务在 session 0，没有交互桌面，SystemEvents.SessionSwitch 收不到
+                        // 交互会话的锁屏 / 解锁 / 远程事件；这些事件改由界面进程感知后通过管道转发
+                        // （SchedulerEngine.InjectSystemEvent）。非交互进程里不订阅，避免和服务端注入双触发。
+                        if (!Environment.UserInteractive)
+                        {
+                            Log.Write("[系统事件] 非交互进程，跳过锁屏/解锁/远程的本地订阅（等待界面转发）");
+                            break;
+                        }
                         SystemEvents.SessionSwitch += OnSessionSwitch;
                         break;
 
@@ -98,6 +106,12 @@ namespace TaskScheduler.Triggers
                         break;
 
                     case SystemEventType.SessionEnding:
+                        // 同样只存在于交互会话：注销 / 关机前。服务进程里不订阅，由界面转发。
+                        if (!Environment.UserInteractive)
+                        {
+                            Log.Write("[系统事件] 非交互进程，跳过 SessionEnding 的本地订阅（等待界面转发）");
+                            break;
+                        }
                         SystemEvents.SessionEnding += OnSessionEnding;
                         break;
 

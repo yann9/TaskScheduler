@@ -38,5 +38,12 @@ namespace TaskScheduler
 
         /// <summary>让持有引擎的一侧重新加载设置（服务模式下界面改了设置要通知服务端）</summary>
         void ReloadSettings();
+
+        /// <summary>
+        /// 把交互会话系统事件（锁屏/解锁/远程桌面等）转发出去。
+        /// 服务模式：发给后台服务（服务端再注入引擎触发匹配任务）；
+        /// 本地模式：引擎本就在交互会话里自行监听，无需转发，这里应做成空操作。
+        /// </summary>
+        void NotifySystemEvent(SystemEventType ev);
     }
 }

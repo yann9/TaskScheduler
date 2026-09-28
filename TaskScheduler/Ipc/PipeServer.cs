@@ -197,6 +197,15 @@ namespace TaskScheduler.Ipc
                             var err = Log.ClearFile();
                             return err == null ? Ok("cleared") : Fail("删除日志文件失败：" + err);
                         }
+                    case IpcCommand.SystemEvent:
+                        {
+                            // 载荷就是 SystemEventType 的整数值（裸 int，无 $type，反序列化绝对安全）
+                            var code = 0;
+                            if (!string.IsNullOrWhiteSpace(req.Payload))
+                                code = JsonConvert.DeserializeObject<int>(req.Payload, IpcJson.Settings);
+                            _engine.InjectSystemEvent((SystemEventType)code);
+                            return Ok("forwarded");
+                        }
                     default:
                         return Fail("未知命令");
                 }

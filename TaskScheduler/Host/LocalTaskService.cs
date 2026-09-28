@@ -56,5 +56,8 @@ namespace TaskScheduler
         }
 
         public void ReloadSettings() => SettingsService.Reload();
+
+        // 本地模式引擎就在交互会话里，触发器自己订阅 SystemEvents，无需转发（转发反而会双触发）
+        public void NotifySystemEvent(SystemEventType ev) { }
     }
 }

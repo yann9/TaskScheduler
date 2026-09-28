@@ -31,7 +31,15 @@ namespace TaskScheduler.Ipc
         ReloadSettings,
 
         /// <summary>删除日志文件（日志窗口的"清空日志文件"）</summary>
-        ClearLogFile
+        ClearLogFile,
+
+        /// <summary>
+        /// 界面把交互会话系统事件（锁屏/解锁/远程桌面等）转发给服务，
+        /// 载荷为 SystemEventType 的整数值。
+        /// 服务运行在 session 0，收不到这些本属于交互会话的事件，
+        /// 由界面进程感知后经此命令转发，服务端 SchedulerEngine.InjectSystemEvent 触发匹配任务。
+        /// </summary>
+        SystemEvent
     }
 
     /// <summary>IPC 请求：一行 JSON（命令 + 可选 Payload JSON）</summary>

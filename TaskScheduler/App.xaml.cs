@@ -2,6 +2,7 @@
 using System.ServiceProcess;
 using System.Threading;
 using System.Windows;
+using Microsoft.Win32;
 using TaskScheduler.Engine;
 using TaskScheduler.Ipc;
 using TaskScheduler.Native;
@@ -44,6 +45,14 @@ namespace TaskScheduler
 
         /// <summary>为 true 时允许真正退出（绕过"关闭即最小化到托盘"）</summary>
         public static bool ForceClose { get; set; }
+
+        /// <summary>
+        /// 服务模式下的"交互会话事件转发器"宿主引用。
+        /// 服务运行在 session 0 收不到锁屏/解锁/远程桌面等交互会话事件，
+        /// 由本进程（待在交互会话里）感知后经管道转发给后台服务。
+        /// 本地模式不挂接（引擎自己监听，转发会双触发）。
+        /// </summary>
+        private static ITaskService _sessionHost;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -190,6 +199,20 @@ namespace TaskScheduler
             else
             {
                 Log.Write("已连接到后台服务，UI 仅作为配置/监控客户端");
+            }
+
+            // 服务模式：本进程在交互会话中，能收到锁屏/解锁/远程桌面/注销等会话事件；
+            // 服务在 session 0 收不到，这里挂上转发器，把事件经管道送给服务触发匹配任务。
+            if (serviceMode)
+            {
+                _sessionHost = host;
+                try
+                {
+                    SystemEvents.SessionSwitch += OnUiSessionSwitch;
+                    SystemEvents.SessionEnding += OnUiSessionEnding;
+                    Log.Write("服务模式：已挂接交互会话事件转发（锁屏/解锁/远程桌面/注销关机）");
+                }
+                catch (Exception ex) { Log.Error("挂接交互会话事件转发失败：" + ex.Message); }
             }
 
             Log.Write("创建并显示主窗口…");
@@ -535,11 +558,46 @@ namespace TaskScheduler
             System.Windows.Application.Current.Shutdown();
         }
 
+        // ================= 交互会话事件转发（服务模式专用） =================
+
+        /// <summary>
+        /// 交互会话里的会话切换事件 → 映射成 SystemEventType 后转发给后台服务。
+        /// 只关心锁屏 / 解锁 / 远程桌面连接 / 断开这四类（它们都发往交互会话窗口，
+        /// 服务在 session 0 收不到）。
+        /// </summary>
+        private static void OnUiSessionSwitch(object sender, SessionSwitchEventArgs e)
+        {
+            var ev = e.Reason switch
+            {
+                SessionSwitchReason.SessionLock => SystemEventType.Lock,
+                SessionSwitchReason.SessionUnlock => SystemEventType.Unlock,
+                SessionSwitchReason.RemoteConnect => SystemEventType.RemoteConnect,
+                SessionSwitchReason.RemoteDisconnect => SystemEventType.RemoteDisconnect,
+                _ => (SystemEventType?)null
+            };
+            if (ev.HasValue) ForwardSystemEvent(ev.Value);
+        }
+
+        /// <summary>注销 / 关机前：同样只在交互会话里才收得到，转发给服务作为"最后机会"触发</summary>
+        private static void OnUiSessionEnding(object sender, SessionEndingEventArgs e)
+        {
+            ForwardSystemEvent(SystemEventType.SessionEnding);
+        }
+
+        private static void ForwardSystemEvent(SystemEventType ev)
+        {
+            // 失败（服务正好在重启 / 管道短暂不可用）只记日志，不阻塞 UI 消息循环
+            try { _sessionHost?.NotifySystemEvent(ev); }
+            catch (Exception ex) { Log.Error("转发系统事件失败（" + ev + "）：" + ex.Message); }
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
             _exiting = true;
             try { if (Engine != null) { Engine.Stop(); Engine.Save(); } } catch { }
             try { Tray?.Dispose(); } catch { }
+            try { SystemEvents.SessionSwitch -= OnUiSessionSwitch; } catch { }
+            try { SystemEvents.SessionEnding -= OnUiSessionEnding; } catch { }
             try { _mainHwndSource?.RemoveHook(OnMainWindowMessage); } catch { }
             try { _showEvent?.Dispose(); } catch { }
             try { _exitEvent?.Dispose(); } catch { }

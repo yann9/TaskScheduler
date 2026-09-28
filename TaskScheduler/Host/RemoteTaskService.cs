@@ -116,6 +116,8 @@ namespace TaskScheduler
 
         public void ReloadSettings() => SendOrThrow(IpcCommand.ReloadSettings);
 
+        public void NotifySystemEvent(SystemEventType ev) => SendOrThrow(IpcCommand.SystemEvent, (int)ev);
+
         public void ClearLogFile() => SendOrThrow(IpcCommand.ClearLogFile);
 
         private void SendOrThrow(IpcCommand cmd, object payload = null)
