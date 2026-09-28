@@ -21,6 +21,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
@@ -89,6 +92,72 @@ jobs:
           # Portable package: the published app files (no installer).
           Compress-Archive -Path "$dist\*" -DestinationPath "TaskScheduler-$v-portable.zip" -Force
 
+      - name: Generate categorized release notes
+        id: notes
+        shell: pwsh
+        run: |
+          $ver = '${{ steps.ver.outputs.version }}'.Trim()
+          # 当前版本号（解析失败则视为极大值，所有历史 tag 都算"上一个"）
+          $curVer = $null
+          if (-not [version]::TryParse($ver, [ref]$curVer)) { $curVer = [version]::new(9999,0) }
+
+          # 找上一个版本 tag：版本号严格小于当前的最高 tag
+          $prev = $null
+          $bestVer = $null
+          foreach ($t in (git tag --list 'v*')) {
+            $v = $null
+            if ([version]::TryParse($t -replace '^v','', [ref]$v) -and $v -lt $curVer) {
+              if ($bestVer -eq $null -or $v -gt $bestVer) { $prev = $t; $bestVer = $v }
+            }
+          }
+          # 取上一个 tag 到当前 HEAD 之间的全部提交；首个版本则取全部历史
+          $range = if ($prev) { "$prev..HEAD" } else { "HEAD" }
+          Write-Host "Notes range: $range (prev=$prev)"
+
+          $feat  = [System.Collections.Generic.List[string]]::new()
+          $fix   = [System.Collections.Generic.List[string]]::new()
+          $other = [System.Collections.Generic.List[string]]::new()
+
+          # 解析每条提交主题的首行：形如 "feat: xxx" / "fix: xxx" → 按前缀分类
+          foreach ($line in (git log $range --pretty=format:"%s")) {
+            $line = $line.Trim()
+            if ($line -match '^(?<type>[a-zA-Z]+):\s*(?<desc>.*)$') {
+              $type = $matches['type'].ToLower()
+              $desc = $matches['desc'].Trim()
+              if ($desc -eq '') { $desc = $line }
+              switch ($type) {
+                { $_ -in 'feat','feature' }            { $feat.Add($desc) }
+                { $_ -in 'fix','bugfix','bug','hotfix' } { $fix.Add($desc) }
+                default                                { $other.Add("$type`: $desc") }
+              }
+            } elseif ($line -ne '') {
+              $other.Add($line)
+            }
+          }
+
+          $sb = [System.Text.StringBuilder]::new()
+          [void]$sb.AppendLine("# 更新说明 v$ver")
+          [void]$sb.AppendLine('')
+          if ($feat.Count -gt 0) {
+            [void]$sb.AppendLine('## 新功能')
+            foreach ($f in $feat) { [void]$sb.AppendLine("- $f") }
+            [void]$sb.AppendLine('')
+          }
+          if ($fix.Count -gt 0) {
+            [void]$sb.AppendLine('## 问题修复')
+            foreach ($f in $fix) { [void]$sb.AppendLine("- $f") }
+            [void]$sb.AppendLine('')
+          }
+          if ($other.Count -gt 0) {
+            [void]$sb.AppendLine('## 其它')
+            foreach ($o in $other) { [void]$sb.AppendLine("- $o") }
+            [void]$sb.AppendLine('')
+          }
+          [void]$sb.AppendLine('_由 CI 依据提交历史自动生成（按 feat / fix 等前缀分类）_')
+
+          Set-Content -Path release_notes.md -Value $sb.ToString() -Encoding utf8
+          Write-Host "Release notes generated: feat=$($feat.Count) fix=$($fix.Count) other=$($other.Count)"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -97,6 +166,7 @@ jobs:
           draft: false
           prerelease: false
           fail_on_unmatched_files: true
+          body_path: release_notes.md
           files: |
             TaskScheduler-${{ steps.ver.outputs.version }}-setup.exe
             TaskScheduler-${{ steps.ver.outputs.version }}-portable.zip
