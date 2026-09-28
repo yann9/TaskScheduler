@@ -167,6 +167,9 @@ jobs:
           prerelease: false
           fail_on_unmatched_files: true
           body_path: release_notes.md
+          # GitHub 原生自动说明（What's Changed + 完整提交列表 + 新贡献者）会追加在 body_path 内容之后，
+          # 与上面按 feat/fix 分类的手写说明互补，两边都不缺
+          generate_release_notes: true
           files: |
             TaskScheduler-${{ steps.ver.outputs.version }}-setup.exe
             TaskScheduler-${{ steps.ver.outputs.version }}-portable.zip
