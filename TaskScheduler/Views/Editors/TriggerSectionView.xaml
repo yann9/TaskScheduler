@@ -222,7 +222,7 @@
                                Visibility="{Binding SelectedTriggerType, Converter={StaticResource EnumVis}, ConverterParameter=SystemEvent}"/>
 
                     <TextBlock Grid.Row="5" Grid.Column="1" Style="{StaticResource Footnote}"
-                               Text="服务模式注意：锁屏 / 解锁、远程桌面连接这类事件依赖交互会话，服务模式（Session 0）下取不到，建议改用「登录时自动启动」运行。"
+                               Text="服务模式下这些事件由托盘进程感知并转发给后台服务，请保持托盘程序运行；托盘退出期间锁屏 / 解锁等事件不会被触发。"
                                Visibility="{Binding SelectedTriggerType, Converter={StaticResource EnumVis}, ConverterParameter=SystemEvent}"/>
                 </Grid>
             </StackPanel>
