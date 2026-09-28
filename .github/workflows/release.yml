@@ -97,16 +97,28 @@ jobs:
         shell: pwsh
         run: |
           $ver = '${{ steps.ver.outputs.version }}'.Trim()
+
+          # 把 tag 解析成 [version]。注意：pwsh 下 [version]::TryParse($x, [ref]$v) 的
+          # 内联 [ref] 调用会触发方法重载解析失败（"argument count: 3"），故统一用
+          # [version]::new(...) 构造，避免该坑。
+          function New-Version([string]$tag) {
+            $s = $tag -replace '^v', ''
+            $parts = @($s -split '[.\-+]' | Where-Object { $_ -match '^\d+$' })
+            if ($parts.Count -eq 0) { throw "not a version tag: $tag" }
+            while ($parts.Count -lt 4) { $parts += '0' }
+            return [version]::new([int]$parts[0], [int]$parts[1], [int]$parts[2], [int]$parts[3])
+          }
+
           # 当前版本号（解析失败则视为极大值，所有历史 tag 都算"上一个"）
           $curVer = $null
-          if (-not [version]::TryParse($ver, [ref]$curVer)) { $curVer = [version]::new(9999,0) }
+          try { $curVer = New-Version "v$ver" } catch { $curVer = [version]::new(9999, 0) }
 
           # 找上一个版本 tag：版本号严格小于当前的最高 tag
           $prev = $null
           $bestVer = $null
           foreach ($t in (git tag --list 'v*')) {
-            $v = $null
-            if ([version]::TryParse($t -replace '^v','', [ref]$v) -and $v -lt $curVer) {
+            try { $v = New-Version $t } catch { continue }
+            if ($v -lt $curVer) {
               if ($bestVer -eq $null -or $v -gt $bestVer) { $prev = $t; $bestVer = $v }
             }
           }
