@@ -62,6 +62,9 @@ namespace TaskScheduler.ViewModels
         public ICommand OpenLogWindowCommand { get; }
         public ICommand OpenRunHistoryCommand { get; }
         public ICommand OpenSettingsCommand { get; }
+        /// <summary>查看"当前选中任务"的运行记录（任务列表右键 / 任务菜单入口）</summary>
+        public ICommand ViewSelectedTaskHistoryCommand { get; }
+        public ICommand OpenAboutCommand { get; }
 
         public MainViewModel(ITaskService host, bool serviceMode)
         {
@@ -99,6 +102,11 @@ namespace TaskScheduler.ViewModels
             OpenLogWindowCommand = new RelayCommand(OpenLogWindow);
             OpenRunHistoryCommand = new RelayCommand(() => OpenRunHistory(null));
             OpenSettingsCommand = new RelayCommand(OpenSettings);
+            // 选中任务后才看得到"这个任务的记录"；CanExecute 随 SelectedTask 变化自动重算
+            //（依赖 CommandManager 的输入事件重算，与现有 EditCommand 同一机制）。
+            ViewSelectedTaskHistoryCommand = new RelayCommand(
+                () => OpenRunHistory(SelectedTask?.Id), () => SelectedTask != null);
+            OpenAboutCommand = new RelayCommand(OpenAbout);
 
             Reload();
             RefreshServiceState();
@@ -509,6 +517,19 @@ namespace TaskScheduler.ViewModels
 
             ApplySettings();
             Reload();
+        }
+
+        /// <summary>选中任务变化时，强制让依赖 SelectedTask 的命令（编辑/删除/查看记录…）重算一次启用状态</summary>
+        partial void OnSelectedTaskChanged(AutomationTask value)
+            => CommandManager.InvalidateRequerySuggested();
+
+        private void OpenAbout()
+        {
+            var win = new Views.AboutWindow
+            {
+                Owner = System.Windows.Application.Current.MainWindow
+            };
+            win.ShowDialog();
         }
 
         private void Exit()

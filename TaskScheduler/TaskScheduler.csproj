@@ -13,6 +13,11 @@
     <AssemblyTitle>自动化任务调度器</AssemblyTitle>
     <Product>自动化任务调度器</Product>
     <Description>Windows 下基于多种触发器与条件的定时 / 自动化任务桌面程序（支持后台服务保活）</Description>
+    <!-- 版本号：与 TaskScheduler.nsi 的 TS_VERSION 保持一致（CI 用 tag 覆盖 nsi）。
+         填在这里既给 exe 带上文件版本信息，也供「关于」窗口读取显示。 -->
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 

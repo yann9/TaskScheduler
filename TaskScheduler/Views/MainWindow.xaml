@@ -148,12 +148,6 @@
                 <MenuItem Header="新建任务" Command="{Binding NewCommand}" InputGestureText="Ctrl+N"/>
                 <MenuItem Header="刷新列表" Command="{Binding RefreshCommand}" InputGestureText="F5"/>
                 <Separator Style="{StaticResource TsMenuSeparator}"/>
-                <MenuItem Header="运行记录…" Command="{Binding OpenRunHistoryCommand}"
-                          InputGestureText="Ctrl+Shift+H"/>
-                <MenuItem Header="运行日志…" Command="{Binding OpenLogWindowCommand}"
-                          InputGestureText="Ctrl+L"/>
-                <MenuItem Header="设置…" Command="{Binding OpenSettingsCommand}"/>
-                <Separator Style="{StaticResource TsMenuSeparator}"/>
                 <MenuItem Header="退出" Command="{Binding ExitCommand}"/>
             </MenuItem>
 
@@ -164,6 +158,19 @@
                 <Separator Style="{StaticResource TsMenuSeparator}"/>
                 <MenuItem Header="启用 / 停用" Command="{Binding ToggleCommand}"/>
                 <MenuItem Header="立即运行" Command="{Binding RunNowCommand}" InputGestureText="F9"/>
+                <Separator Style="{StaticResource TsMenuSeparator}"/>
+                <MenuItem Header="查看运行记录" Command="{Binding ViewSelectedTaskHistoryCommand}"
+                          ToolTip="只看当前选中任务的运行历史（在「运行记录」窗口里预置筛选）。"/>
+            </MenuItem>
+
+            <MenuItem Header="视图(_V)">
+                <MenuItem Header="运行记录（全部）" Command="{Binding OpenRunHistoryCommand}"
+                          InputGestureText="Ctrl+Shift+H"
+                          ToolTip="查看所有任务的运行历史（按任务 / 结果 / 关键字筛选）。"/>
+                <MenuItem Header="运行日志" Command="{Binding OpenLogWindowCommand}"
+                          InputGestureText="Ctrl+L"/>
+                <Separator Style="{StaticResource TsMenuSeparator}"/>
+                <MenuItem Header="设置…" Command="{Binding OpenSettingsCommand}"/>
             </MenuItem>
 
             <MenuItem Header="引擎(_E)">
@@ -187,6 +194,10 @@
                           ToolTip="启动已安装的后台服务。服务会在开机时自动启动，正常情况下不需要手动点。"/>
                 <MenuItem Header="停止服务" Command="{Binding StopServiceCommand}"
                           ToolTip="停掉后台服务后，任务不再被后台执行。&#10;想继续跑就切到「引擎 → 启动引擎」，用本地模式托管。"/>
+            </MenuItem>
+
+            <MenuItem Header="帮助(_H)">
+                <MenuItem Header="关于…" Command="{Binding OpenAboutCommand}"/>
             </MenuItem>
         </Menu>
 
@@ -254,6 +265,11 @@
                     <MenuItem Header="立即运行" InputGestureText="F9"
                               Command="{Binding PlacementTarget.DataContext.RunNowCommand,
                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <Separator Style="{StaticResource TsMenuSeparator}"/>
+                    <MenuItem Header="查看运行记录"
+                              Command="{Binding PlacementTarget.DataContext.ViewSelectedTaskHistoryCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                              ToolTip="只看这个任务的运行历史。"/>
                 </ContextMenu>
             </DataGrid.ContextMenu>
 
