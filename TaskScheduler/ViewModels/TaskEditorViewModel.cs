@@ -36,6 +36,9 @@ namespace TaskScheduler.ViewModels
 
         private readonly bool _isNew;
 
+        /// <summary>编辑器打开时任务原本的排期签名（见 ResetSchedule 的说明）</summary>
+        private readonly string _scheduleSignatureAtOpen;
+
         /// <summary>新建任务</summary>
         public TaskEditorViewModel() : this(null) { }
 
@@ -49,6 +52,8 @@ namespace TaskScheduler.ViewModels
                 Trigger = new TimeTrigger(),
                 Action = new RunProgramAction()
             };
+
+            _scheduleSignatureAtOpen = (Task.Trigger as TimeTrigger)?.ScheduleSignature() ?? "";
 
             // 分区之间不直接互相依赖；唯一的中转是 Host（见 AdvancedSectionViewModel 的注释）。
             // TriggerSection 必须先建：AdvancedSection 会订阅它的属性变化。
@@ -90,13 +95,17 @@ namespace TaskScheduler.ViewModels
         }
 
         /// <summary>
-        /// 保存前调用：丢弃存档里的"下次执行时间"，让引擎按当前设置重新排期。
-        /// 否则改了间隔 / 方式后触发器会沿用旧计划（例如"每天"改成"每隔 30 分钟"还等到明天 9 点才生效）。
-        /// HasScheduled 不动，所以不会把已排期过的任务当成新任务、再触发一次"首次执行"。
+        /// 保存前调用：仅当排期参数真的改了，才丢弃存档里的"下次执行时间"让引擎重新排期。
+        /// 只改动作 / 条件 / 备注时必须保留原计划——否则间隔任务的计时锚点会被这次编辑
+        /// 重置成"编辑时刻 + 间隔"，用户看到的就是"每 4 小时的任务没在原来的点跑"。
+        /// 排期变了才重算；HasScheduled 不动，不会把已排期过的任务当成新任务再触发一次"首次执行"。
         /// </summary>
         public void ResetSchedule()
         {
-            if (Task.Trigger is TimeTrigger tt) tt.NextRunTime = null;
+            var tt = Task.Trigger as TimeTrigger;
+            if (tt == null) return;
+            if (tt.ScheduleSignature() == _scheduleSignatureAtOpen) return;
+            tt.NextRunTime = null;
         }
 
         /// <summary>窗口关闭时必须调用：释放分区里挂着的静态事件订阅</summary>

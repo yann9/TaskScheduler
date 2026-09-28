@@ -326,6 +326,25 @@ namespace TaskScheduler.Triggers
         }
 
         /// <summary>
+        /// 排期签名：把所有影响"下次执行时间"的字段拼成一个字符串，用于比较两次排期是否相同。
+        ///
+        /// 为什么需要：编辑任务时不能无脑丢弃已存的 <see cref="NextRunTime"/>——
+        /// 间隔任务的计划点是"上次锚点 + N 周期"，如果只改了动作/条件也重排，
+        /// 锚点就会变成"编辑那一刻"，例如每 4 小时的任务在 13:38 改了个动作，
+        /// 下次执行就从 14:46 漂移到 17:38，用户看起来就是"到点没跑"。
+        /// 只有排期参数真的变了，才应该按新设置重新锚定。
+        /// </summary>
+        public string ScheduleSignature() => string.Join("|",
+            (int)Kind,
+            TargetTime?.ToString("o") ?? "",
+            DailyTime, DaysInterval,
+            WeeklyDays == null ? "" : string.Join(",", WeeklyDays.Select(d => (int)d).OrderBy(x => x)),
+            WeeklyTime,
+            (int)MonthlyKind, MonthlyDay, MonthlyNth, (int)MonthlyWeekday, MonthlyTime,
+            IntervalValue, (int)IntervalUnit,
+            RandomJitterMinutes, SkipWeekend, SkipHolidays, ExtraSkipDates.Trim());
+
+        /// <summary>
         /// 把"跳过周末 / 跳过节假日 / 额外跳过日期"应用到候选时间点上：
         /// 命中就整体往后顺延一天（保持原来的时刻），直到落到一个该执行的日子。
         ///
