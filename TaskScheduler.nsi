@@ -94,6 +94,7 @@ Page custom OptionsPageCreate OptionsPageLeave   ; 三个勾选框（自启 / �
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
+UninstPage custom un.OptionsPageCreate un.OptionsPageLeave   ; 卸载时是否删除用户数据（默认保留）
 !insertmacro MUI_UNPAGE_INSTFILES
 
 !insertmacro MUI_LANGUAGE "SimpChinese"
@@ -117,6 +118,8 @@ Var hDlg
 Var hChkDesktop
 Var hChkAutoStart
 Var hChkService
+Var hChkDeleteData    ; 卸载页"删除用户数据"勾选框句柄
+Var OptDeleteData     ; 卸载时是否删除用户数据（1=删除，默认 0=保留）
 Var CommonDataDir     ; C:\ProgramData（提示日志路径用）
 
 ; ============================================================================
@@ -164,6 +167,13 @@ Function un.onInit
   ${If} ${RunningX64}
     SetRegView 64
   ${EndIf}
+  ; 取 ProgramData 目录（与 C# Environment.SpecialFolder.CommonApplicationData 一致），
+  ; 供"可选删除用户数据"使用。NSIS 没有内建的 $COMMONDATA，这里自行解析。
+  System::Call 'shell32::SHGetFolderPathW(p 0, i 0x0023, p 0, p 0, t .r0)'
+  StrCpy $CommonDataDir $0
+  ${If} $CommonDataDir == ""
+    StrCpy $CommonDataDir "C:\ProgramData"
+  ${EndIf}
 FunctionEnd
 
 ; ============================================================================
@@ -189,6 +199,28 @@ Function OptionsPageLeave
   ${NSD_GetState} $hChkDesktop    $OptDesktop
   ${NSD_GetState} $hChkAutoStart  $OptAutoStart
   ${NSD_GetState} $hChkService    $OptInstallService
+FunctionEnd
+
+; ============================================================================
+;  卸载选项页（nsDialogs）：是否删除用户数据（默认保留）
+; ============================================================================
+Function un.OptionsPageCreate
+  !insertmacro MUI_HEADER_TEXT "删除用户数据" "选择卸载时是否一并删除用户数据"
+  nsDialogs::Create 1018
+  Pop $hDlg
+  ${NSD_CreateCheckbox} 0 16u  100% 12u "删除所有用户数据（任务配置、运行记录、日志等）"
+  Pop $hChkDeleteData
+  ${If} $OptDeleteData <> 0
+    ${NSD_SetState} $hChkDeleteData ${BST_CHECKED}
+  ${EndIf}
+  ${NSD_CreateLabel} 0 38u  100% 36u \
+    "勾选后将删除数据目录：$CommonDataDir\${TS_DIR_NAME}$\n不勾选则保留，方便日后重新安装时恢复这些数据。"
+  Pop $0
+  nsDialogs::Show
+FunctionEnd
+
+Function un.OptionsPageLeave
+  ${NSD_GetState} $hChkDeleteData $OptDeleteData
 FunctionEnd
 
 ; ============================================================================
@@ -365,6 +397,12 @@ Section "un.Install"
   Delete "$SMPROGRAMS\${TS_APP_NAME}\卸载 ${TS_APP_NAME}.lnk"
   RMDir  "$SMPROGRAMS\${TS_APP_NAME}"
   Delete "$DESKTOP\${TS_APP_NAME}.lnk"
-  ; %ProgramData%\TaskScheduler 下的任务配置与运行记录**不动**
-  ; （卸载只删软件，保留用户数据）
+
+  ; ---- 6) 用户数据（可选删除，默认保留）----
+  ${If} $OptDeleteData = 1
+    DetailPrint "正在删除用户数据：$CommonDataDir\${TS_DIR_NAME}"
+    RMDir /r "$CommonDataDir\${TS_DIR_NAME}"
+  ${Else}
+    DetailPrint "保留用户数据（任务配置、运行记录、日志）：$CommonDataDir\${TS_DIR_NAME}"
+  ${EndIf}
 SectionEnd
