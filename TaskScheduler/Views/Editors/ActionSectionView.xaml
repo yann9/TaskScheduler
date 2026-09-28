@@ -132,9 +132,51 @@
                              VerticalContentAlignment="Top"
                              Text="{Binding HttpActionObj.Body, UpdateSourceTrigger=PropertyChanged}"/>
 
-                    <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource Hint}"
-                               Text="返回的响应摘要（状态码、正文前若干字符）会写进「运行记录」，排障时不用自己去抓包。"/>
+                    <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="请求体"/>
+                    <TextBox Grid.Row="4" Grid.Column="1" Height="80" TextWrapping="Wrap" AcceptsReturn="True"
+                             VerticalContentAlignment="Top"
+                             Text="{Binding HttpActionObj.Body, UpdateSourceTrigger=PropertyChanged}"/>
                 </Grid>
+
+                <!-- 自定义请求头 -->
+                <StackPanel Margin="0,10,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{StaticResource FieldLabel}" Text="自定义请求头"/>
+                        <Button Grid.Column="1" Content="添加请求头" Width="100" HorizontalAlignment="Left"
+                                Command="{Binding AddHeaderCommand}"/>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding HttpActionObj.Headers}" Margin="0,6,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,2,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" MaxWidth="240"/>
+                                        <ColumnDefinition Width="*" MaxWidth="240"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Margin="0,0,6,0"
+                                             Text="{Binding Key, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="请求头名称，例如 Authorization、X-Api-Key"/>
+                                    <TextBox Grid.Column="1" Margin="0,0,6,0"
+                                             Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="请求头值"/>
+                                    <Button Grid.Column="2" Content="删除" Width="60"
+                                            Command="{Binding DataContext.RemoveHeaderCommand,
+                                                      RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <TextBlock Margin="0,10,0,0" Style="{StaticResource Hint}"
+                           Text="完整响应（状态码 + 响应体前 2000 字符）会写进「运行记录」的「输出」栏，排障时不用自己去抓包。"/>
             </StackPanel>
         </Border>
 

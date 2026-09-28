@@ -87,6 +87,22 @@ namespace TaskScheduler.ViewModels.Sections
         public ICommand BrowseSourceCommand { get; }
         public ICommand BrowseDestCommand { get; }
 
+        // ===== HTTP 自定义请求头增删 =====
+        public ICommand AddHeaderCommand => new RelayCommand(() =>
+        {
+            var target = HttpActionObj;
+            if (target == null) return;
+            target.Headers.Add(new HttpHeader());
+            RaiseActionProps();
+        });
+        public ICommand RemoveHeaderCommand => new RelayCommand<object>(o =>
+        {
+            var target = HttpActionObj;
+            if (target == null || o is not HttpHeader hh) return;
+            target.Headers.Remove(hh);
+            RaiseActionProps();
+        });
+
         /// <summary>
         /// 切换动作类型时保留各类型下已填好的配置：切走再切回来内容还在。
         /// （旧实现直接 new 空实例，用户填好"运行程序"的路径、顺手看一眼"HTTP 请求"，
