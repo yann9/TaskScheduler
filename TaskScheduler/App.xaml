@@ -1,0 +1,27 @@
+﻿<Application x:Class="TaskScheduler.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:TaskScheduler"
+             xmlns:conv="clr-namespace:TaskScheduler.Converters">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- 全局主题基座：页面底色/卡片/文字层级（原生优先，见 Theme.xaml 头注释）。
+                     必须排在 EditorStyles 之前（合并字典按逆序查找，同名 key 后者覆盖前者）；
+                     两者互不引用（合并字典的延迟加载看不到上层），各自自包含。 -->
+                <ResourceDictionary Source="Styles/Theme.xaml"/>
+                <!-- 编辑器专用样式（全部带 x:Key，不会影响主窗口的同名控件）。
+                     必须挂在应用级：分区 UserControl 在解析自身 XAML 时还没有父级，
+                     沿树向上找不到窗口资源。 -->
+                <ResourceDictionary Source="Styles/EditorStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <conv:EnumVisibilityConverter x:Key="EnumVis"/>
+            <conv:DateTimeConverter x:Key="DtConv"/>
+            <conv:TimeSpanConverter x:Key="TsConv"/>
+            <BooleanToVisibilityConverter x:Key="BoolVis"/>
+            <!-- EnumChineseConverter（中文枚举名）声明在 Styles/EditorStyles.xaml 里：
+                 合并字典的延迟模板内容看不到本字典，必须与使用它的 DataTemplate 同处一典。 -->
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

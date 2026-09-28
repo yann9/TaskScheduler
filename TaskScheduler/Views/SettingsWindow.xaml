@@ -1,0 +1,282 @@
+﻿<Window x:Class="TaskScheduler.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="设置" Height="720" Width="740" MinWidth="640" MinHeight="560"
+        WindowStartupLocation="CenterOwner"
+        Grid.IsSharedSizeScope="True">
+
+    <!--
+        设置窗口专用排版样式。视觉基础件（Card/分组标题色条/Hint/主按钮）已上移
+        Styles/Theme.xaml 全局主题 —— 这里只留"本窗口特有的排版语义"：
+        标签左对齐、值列宽度、提示行距。
+
+        排版规则（整页统一，改的时候请保持）：
+          · 每个设置项 = 一行 Grid，左列是标签，右列是控件；
+            SharedSizeGroup="Lbl" + 窗口上的 IsSharedSizeScope 让五张卡片的标签列
+            宽度一致，于是所有值控件、所有提示文字的左边线能对齐成一条竖线。
+          · 标签一律**左对齐**（覆盖 FieldLabel 的右对齐）—— 这样"有标签的项"和
+            "整行复选框"的左边缘都落在卡片内容边缘上，整页只有一个左基准线。
+          · 提示文字放值列（第 1 列），表示它是"值"的补充说明。
+    -->
+    <Window.Resources>
+        <Style x:Key="SettingLabel" TargetType="TextBlock" BasedOn="{StaticResource FieldLabel}">
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,16,0"/>
+        </Style>
+
+        <Style x:Key="SettingCheck" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="Margin" Value="0,4"/>
+        </Style>
+
+        <Style x:Key="SettingValue" TargetType="StackPanel">
+            <Setter Property="Orientation" Value="Horizontal"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,3"/>
+        </Style>
+
+        <Style x:Key="ValueBox" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+            <Setter Property="MinWidth" Value="110"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="SettingHint" TargetType="TextBlock" BasedOn="{StaticResource Hint}">
+            <Setter Property="Margin" Value="0,5,0,2"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+
+        <!-- 底部按钮：灰 chrome 条 -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource ChromeBgBrush}"
+                BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="0,1,0,0"
+                Padding="20,10">
+            <Grid>
+                <Button Content="恢复默认值" Width="110" HorizontalAlignment="Left"
+                        Command="{Binding RestoreDefaultsCommand}"
+                        ToolTip="把下面所有项恢复成出厂值。点「确定」后才会真正生效。"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="确定" Width="96" Margin="0,0,10,0"
+                            Style="{StaticResource AccentButton}"
+                            IsDefault="True" Click="Ok_Click"/>
+                    <Button Content="取消" Width="96" IsCancel="True" Click="Cancel_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20,18,20,14">
+            <StackPanel>
+
+                <!-- ===== 启动 ===== -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="启动"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10"
+                                   Text="决定程序怎么被拉起，以及引擎要不要自己开始干活"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <CheckBox Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                                      Style="{StaticResource SettingCheck}"
+                                      Content="开机（登录）时自动启动本程序"
+                                      IsChecked="{Binding AutoStartWithWindows}"
+                                      ToolTip="写入 HKCU\Software\Microsoft\Windows\CurrentVersion\Run。&#10;只对当前登录用户生效。"/>
+
+                            <CheckBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                      Style="{StaticResource SettingCheck}"
+                                      Content="开机自启时直接最小化到托盘"
+                                      IsChecked="{Binding Settings.AutoStartMinimized}"
+                                      IsEnabled="{Binding AutoStartWithWindows}"
+                                      ToolTip="只对「随 Windows 登录自动启动」那一次生效：登录后不弹主窗口，只留一个托盘图标。&#10;手动双击桌面图标不受影响，始终正常显示窗口。&#10;需要先勾选上面的「开机自动启动」。"/>
+
+                            <CheckBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                      Style="{StaticResource SettingCheck}"
+                                      Content="启动界面时自动启动引擎（本地托管）"
+                                      IsChecked="{Binding Settings.AutoStartEngine}"
+                                      ToolTip="取消勾选后，程序启动时引擎保持停止状态，需要手动在「引擎」菜单里启动。&#10;只对未安装后台服务的本地托管生效：服务已安装时任务一律由服务执行。"/>
+
+                            <!-- 2026-09-24 引擎互斥：程序自动保证，不再让用户自己关自启 -->
+                            <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource SettingHint}"
+                                       Text="后台服务已安装时，任务一律由服务执行：程序会自动停用本地引擎，两个引擎不会同时运行。「启动界面时自动启动引擎」只在未安装后台服务时生效。"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== 关闭与通知 ===== -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="关闭与通知"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10"
+                                   Text="点了 × 之后程序去哪，出问题时怎么提醒你"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource SettingLabel}"
+                                       Text="关闭主窗口时"/>
+                            <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ValueBox}"
+                                      HorizontalAlignment="Left"
+                                      ItemsSource="{Binding CloseActions}"
+                                      SelectedItem="{Binding Settings.CloseAction}"
+                                      ItemTemplate="{StaticResource EnumItem}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingHint}"
+                                       Text="选「最小化到托盘」时任务照常按计划执行 —— 点右上角的 × 并不等于退出程序。"/>
+
+                            <CheckBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                      Style="{StaticResource SettingCheck}"
+                                      Content="最小化到托盘时弹一次气泡提示"
+                                      IsChecked="{Binding Settings.ShowTrayHintOnClose}"
+                                      ToolTip="只提示一次，之后不再打扰。用来避免“点了 × 以为退出了、其实程序还在跑”的误会。"/>
+
+                            <CheckBox Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                                      Style="{StaticResource SettingCheck}"
+                                      Content="任务执行失败时弹出气泡提醒"
+                                      IsChecked="{Binding Settings.NotifyOnTaskFailure}"
+                                      ToolTip="失败时在托盘弹一个气泡（含失败原因）。&#10;服务模式下没有交互桌面，会退化为写日志。"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== 运行记录 ===== -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="运行记录"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10"
+                                   Text="每次执行都留一条（含「跳过」），按条数自动丢掉最早的"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource SettingLabel}"
+                                       Text="保留最近"/>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingValue}">
+                                <ComboBox Style="{StaticResource ValueBox}" Width="100"
+                                          ItemsSource="{Binding RunRecordOptions}"
+                                          SelectedItem="{Binding Settings.MaxRunRecords}"/>
+                                <TextBlock Text="次运行" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            </StackPanel>
+
+                            <CheckBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                      Style="{StaticResource SettingCheck}"
+                                      Content="记录成功的运行"
+                                      IsChecked="{Binding Settings.RecordSuccessfulRuns}"
+                                      ToolTip="取消勾选后只记录失败和跳过 —— 一个每分钟跑一次的任务，成功记录几天就能把额度占满，把真正要看的失败挤出去。"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource SettingHint}"
+                                       Text="超过条数后自动丢掉最早的记录（%ProgramData%\TaskScheduler\runs.json）。这是“近期排障”视图，不是永久审计日志。"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== 日志 ===== -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="日志"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10"
+                                   Text="文件写在哪、界面回显多少行"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource SettingLabel}"
+                                       Text="界面显示最近"/>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingValue}">
+                                <ComboBox Style="{StaticResource ValueBox}" Width="100"
+                                          ItemsSource="{Binding LogLineOptions}"
+                                          SelectedItem="{Binding Settings.LogTailLines}"/>
+                                <TextBlock Text="行" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource SettingLabel}"
+                                       Text="单个文件上限"/>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingValue}">
+                                <ComboBox Style="{StaticResource ValueBox}" Width="100"
+                                          ItemsSource="{Binding LogSizeOptions}"
+                                          SelectedItem="{Binding Settings.MaxLogFileMB}"/>
+                                <TextBlock Text="MB" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource SettingHint}"
+                                       Text="写满阈值后旧文件改名为 .1、重新开始记。日志位置：%ProgramData%\TaskScheduler\scheduler.log（「运行日志」窗口里可以直接打开所在目录）。"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== 界面 ===== -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="界面"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10"
+                                   Text="列表看起来怎么样、危险操作要不要先拦一下"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource SettingLabel}"
+                                       Text="任务列表字号"/>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingValue}">
+                                <ComboBox Style="{StaticResource ValueBox}" Width="100"
+                                          ItemsSource="{Binding FontSizeOptions}"
+                                          SelectedItem="{Binding Settings.TaskListFontSize}"/>
+                                <TextBlock Text="px" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            </StackPanel>
+
+                            <CheckBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                      Style="{StaticResource SettingCheck}"
+                                      Content="删除任务前弹出确认"
+                                      IsChecked="{Binding Settings.ConfirmOnDelete}"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource SettingHint}"
+                                       Text="屏幕较小或用远程桌面时，字号调小一点能多显示几行。"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

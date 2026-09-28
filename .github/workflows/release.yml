@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, e.g. 1.0.0 (a tag v<version> will be created)'
+        required: true
+        default: '1.0.0'
+
+# Required so the workflow can create the GitHub Release.
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          # NSIS provides makensis.exe, used by publish.ps1 to build dist\Setup.exe.
+          choco install nsis -y
+          # Make makensis reachable on PATH for subsequent steps / publish.ps1.
+          echo "C:\Program Files (x86)\NSIS" >> $env:GITHUB_PATH
+
+      - name: Determine version
+        id: ver
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $v = '${{ github.event.inputs.version }}'
+          } else {
+            $v = $env:GITHUB_REF_NAME -replace '^v', ''
+          }
+          $v = $v.Trim()
+          echo "version=$v" >> $env:GITHUB_OUTPUT
+          echo "Building release version: $v"
+
+      - name: Patch version into TaskScheduler.nsi
+        shell: pwsh
+        run: |
+          $v = '${{ steps.ver.outputs.version }}'.Trim()
+          # NSIS requires VIProductVersion / FileVersion to be a FOUR-part
+          # "X.X.X.X" string. A tag like "v1.0" would otherwise produce
+          # "1.0.0" (three parts) and makensis aborts the build. Normalize
+          # defensively: take the numeric parts and pad up to four.
+          $parts = ($v -split '[.\-+]') | Where-Object { $_ -match '^\d+$' }
+          while ($parts.Count -lt 4) { $parts += '0' }
+          $v4 = ($parts[0..3] -join '.')
+          $file = 'TaskScheduler.nsi'
+          $content = Get-Content $file -Raw -Encoding UTF8
+          $content = $content -replace '!define TS_VERSION\s+"[^"]+"', "!define TS_VERSION `"$v`""
+          # Override the version-info lines directly with the four-part value so
+          # the build never depends on the "${TS_VERSION}.0" string concatenation.
+          $content = $content -replace 'VIProductVersion\s+"[^"]+"', "VIProductVersion `"$v4`""
+          $content = $content -replace 'VIAddVersionKey\s+/LANG=2052\s+"FileVersion"\s+"[^"]+"', "VIAddVersionKey /LANG=2052 `"FileVersion`" `"$v4`""
+          # Keep the UTF-8 BOM: the .nsi contains Chinese comments, and makensis
+          # misreads a BOM-less UTF-8 file as ANSI on some setups.
+          Set-Content $file -Value $content -Encoding utf8BOM
+          Write-Host "TS_VERSION -> $v ; VIProductVersion/FileVersion -> $v4"
+
+      - name: Publish app and build installer
+        shell: pwsh
+        run: ./publish.ps1
+        # publish.ps1 performs: contract checks, dotnet publish -> dist/, makensis -> dist\Setup.exe
+
+      - name: Prepare release assets
+        shell: pwsh
+        run: |
+          $v = '${{ steps.ver.outputs.version }}'
+          $dist = 'dist'
+          if (-not (Test-Path "$dist\Setup.exe")) {
+            throw "Setup.exe was not produced by the installer build"
+          }
+          # Installer, renamed to a versioned, recognizable name.
+          Move-Item "$dist\Setup.exe" "TaskScheduler-$v-setup.exe"
+          # Portable package: the published app files (no installer).
+          Compress-Archive -Path "$dist\*" -DestinationPath "TaskScheduler-$v-portable.zip" -Force
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: v${{ steps.ver.outputs.version }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            TaskScheduler-${{ steps.ver.outputs.version }}-setup.exe
+            TaskScheduler-${{ steps.ver.outputs.version }}-portable.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

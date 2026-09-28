@@ -1,0 +1,129 @@
+﻿<Window x:Class="TaskScheduler.Views.RunHistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="运行记录" Height="620" Width="1000" MinWidth="700" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        FontFamily="Microsoft YaHei UI" FontSize="12">
+    <Window.Resources>
+        <!-- 筛选工具栏的紧凑变体：只覆盖尺寸，模板/配色复用全局主题（见 LogWindow 同款注释） -->
+        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinHeight" Value="28"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="Padding" Value="10,0"/>
+        </Style>
+        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="MinHeight" Value="26"/>
+        </Style>
+        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+            <Setter Property="MinHeight" Value="26"/>
+        </Style>
+
+        <!-- 表格行业务语义色：失败标红、跳过变灰；基础样式（TsRow 等）已上移 Theme 全局 -->
+        <Style x:Key="TsRowHistory" TargetType="DataGridRow" BasedOn="{StaticResource TsRow}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsFailure}" Value="True">
+                    <Setter Property="Foreground" Value="#C62828"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding OutcomeText}" Value="已跳过">
+                    <Setter Property="Foreground" Value="#9E9E9E"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+    <DockPanel>
+
+        <!-- 筛选栏：灰 chrome 条 -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource ChromeBgBrush}"
+                BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="0,0,0,1"
+                Padding="12,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="任务" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <ComboBox Width="180" ItemsSource="{Binding TaskFilters}"
+                              SelectedItem="{Binding SelectedTaskFilter}" DisplayMemberPath="Name"/>
+
+                    <TextBlock Text="结果" VerticalAlignment="Center" Margin="14,0,6,0"/>
+                    <ComboBox Width="110" ItemsSource="{Binding OutcomeFilters}"
+                              SelectedItem="{Binding SelectedOutcomeFilter}" DisplayMemberPath="Label"/>
+
+                    <TextBlock Text="搜索" VerticalAlignment="Center" Margin="14,0,6,0"/>
+                    <TextBox Width="170" VerticalContentAlignment="Center"
+                             Text="{Binding Keyword, UpdateSourceTrigger=PropertyChanged, Delay=300}"
+                             ToolTip="在任务名、结果说明、触发来源里搜索（忽略大小写）。"/>
+
+                    <TextBlock Text="最多" VerticalAlignment="Center" Margin="14,0,6,0"/>
+                    <ComboBox Width="86" ItemsSource="{Binding LimitOptions}" SelectedItem="{Binding Limit}"/>
+                    <TextBlock Text="条" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                </StackPanel>
+
+                <TextBlock Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right"
+                           Margin="0,0,12,0" Foreground="#777777" Text="{Binding StatusText}"/>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <CheckBox Content="自动刷新" VerticalAlignment="Center" Margin="0,0,12,0"
+                              IsChecked="{Binding AutoRefresh}"/>
+                    <Button Content="刷新" Width="70" Command="{Binding RefreshCommand}"/>
+                    <Button Content="清空记录" Width="88" Margin="8,0,0,0" Command="{Binding ClearCommand}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 选中记录的详情 -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource PageBgBrush}" BorderBrush="#DDE1E6" BorderThickness="0,1,0,0"
+                Padding="12,8" Height="190">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" FontWeight="SemiBold" Foreground="#1F2937"
+                           Text="{Binding SelectedRecord.Message, StringFormat=结果：{0}}"/>
+
+                <TextBlock Grid.Row="1" Foreground="#777777" Margin="0,4,0,6"
+                           Text="{Binding SelectedRecord.Summary, StringFormat=时间：{0}}"/>
+
+                <TextBox Grid.Row="2" IsReadOnly="True" TextWrapping="NoWrap"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Consolas" FontSize="11.5"
+                         Text="{Binding SelectedRecord.Output, Mode=OneWay}"
+                         ToolTip="动作采集到的输出（程序的标准输出 / 错误输出）。没勾「等待程序退出」的动作不会有输出。"/>
+            </Grid>
+        </Border>
+
+        <!-- 记录列表：与主窗口共用 Theme 全局的表格样式（无外框、全网格线、列头灰底竖线） -->
+        <DataGrid Style="{StaticResource TsDataGrid}"
+                  ColumnHeaderStyle="{StaticResource TsColumnHeader}"
+                  RowStyle="{StaticResource TsRowHistory}"
+                  CellStyle="{StaticResource TsCell}"
+                  ItemsSource="{Binding Records}"
+                  SelectedItem="{Binding SelectedRecord, Mode=TwoWay}"
+                  AutoGenerateColumns="False" IsReadOnly="True"
+                  SelectionMode="Single"
+                  HeadersVisibility="Column" RowHeaderWidth="0"
+                  CanUserAddRows="False" CanUserDeleteRows="False"
+                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="时间" Binding="{Binding StartTimeText}" Width="140"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+                <DataGridTextColumn Header="任务" Binding="{Binding TaskName}" Width="160"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+                <DataGridTextColumn Header="触发来源" Binding="{Binding Trigger}" Width="150"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+                <DataGridTextColumn Header="结果" Binding="{Binding OutcomeText}" Width="70"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+                <DataGridTextColumn Header="耗时" Binding="{Binding DurationText}" Width="80"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+                <DataGridTextColumn Header="说明" Binding="{Binding Message}" Width="*" MinWidth="200"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

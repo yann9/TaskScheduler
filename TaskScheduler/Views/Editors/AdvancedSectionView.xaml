@@ -1,0 +1,130 @@
+﻿<UserControl x:Class="TaskScheduler.Views.Editors.AdvancedSectionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Grid.IsSharedSizeScope="True">
+    <StackPanel>
+
+        <!-- ===== 随机抖动 ===== -->
+        <Border Style="{StaticResource Card}"
+                Visibility="{Binding IsTimeTrigger, Converter={StaticResource BoolVis}}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource CardTitle}" Text="随机抖动"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="推迟"/>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                        <TextBox Width="70" Text="{Binding TimeTriggerObj.RandomJitterMinutes, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="填写 N 表示实际触发时刻在计划点之后随机推迟 0–N 分钟。&#10;用途：几十台机器都配了「每天 09:00 上报」，不加抖动会在同一秒一起打服务器。&#10;0 = 关闭。抖动不影响界面上显示的下次执行时间。"/>
+                        <TextBlock Text="分钟（0 = 关闭）" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource Hint}"
+                               Text="多台机器同时跑同一个任务、又都打同一台服务器时用来错峰。单机使用没有意义，保持 0 即可。"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== 跳过规则 ===== -->
+        <Border Style="{StaticResource Card}"
+                Visibility="{Binding ShowSkipRules, Converter={StaticResource BoolVis}}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource CardTitle}" Text="跳过规则"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="跳过的日子"/>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                        <CheckBox Content="跳过周末" IsChecked="{Binding TimeTriggerObj.SkipWeekend}" Margin="0,4,16,8"
+                                  ToolTip="计划时间落在周六 / 周日时，顺延到下一个工作日（保持原时刻）。&#10;调休补班的那个周末不算休息日，会照常执行。"/>
+                        <CheckBox Content="跳过法定节假日" IsChecked="{Binding TimeTriggerObj.SkipHolidays}"
+                                  ToolTip="计划时间落在放假日时顺延到下一个工作日。&#10;依据内置的国务院放假安排（含调休补班日）。"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="额外跳过"/>
+                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                        <TextBox Width="230" Text="{Binding TimeTriggerObj.ExtraSkipDates, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="手工指定还要跳过的日期，例如 2027-02-06，多个用逗号分隔。&#10;用途：在线数据源还没发布次年安排的年份（国务院一般前一年 11 月才发通知），或公司年假、系统维护窗口。"/>
+                        <TextBlock Text="日期，如 2027-02-06，逗号分隔" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="节假日数据"/>
+                    <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
+                        <TextBlock MaxWidth="380" TextWrapping="Wrap" Foreground="#666666" VerticalAlignment="Top"
+                                   Margin="0,6,0,8" Text="{Binding HolidaySyncText}"/>
+                        <Button Content="立即刷新" Width="84" Command="{Binding RefreshHolidaysCommand}"
+                                IsEnabled="{Binding IsHolidayRefreshIdle}"
+                                ToolTip="从公开数据源 holiday-cn 重新拉取节假日安排（含调休补班日）。&#10;平时每 7 天自动同步一次，一般不需要手动点。"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource Hint}"
+                               Text="{Binding HolidayCoverageText, StringFormat=数据覆盖：{0}；顺延会保持原来的时刻，例如「每月 1 日 09:00」在 10 月 1 日放假时改到 10 月 8 日 09:00 执行。}"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource Footnote}"
+                               Text="注意：「间隔循环」方式不显示这些选项 —— 它是纯粹的时间累加，没有「哪一天」的概念，跳过规则对它无效。"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== 任务备注 ===== -->
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource CardTitle}" Text="备注"/>
+                <TextBox Height="80" TextWrapping="Wrap" AcceptsReturn="True" VerticalContentAlignment="Top"
+                         Text="{Binding Task.Note, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="给自己看的说明，例如「依赖 10.1.22.5 的接口」/「改配置前先问运维」。&#10;不参与任何调度逻辑，也不影响任务执行。"/>
+                <TextBlock Style="{StaticResource Hint}" Text="纯说明文字，不参与调度。"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== 任务信息 ===== -->
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource CardTitle}" Text="任务信息"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="下次运行"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" VerticalAlignment="Top" Margin="0,6,0,8"
+                               Text="{Binding NextRunPreview}"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="上次结果"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" VerticalAlignment="Top" Margin="0,6,0,8"
+                               TextWrapping="Wrap" Text="{Binding Task.LastRunResult}"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="任务 ID"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" VerticalAlignment="Top" Margin="0,6,0,0"
+                               FontFamily="Consolas" Foreground="#777777" Text="{Binding Task.Id}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+</UserControl>

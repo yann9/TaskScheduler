@@ -1,0 +1,301 @@
+﻿<Window x:Class="TaskScheduler.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="自动化任务调度器" Height="700" Width="1080"
+        Background="White"
+        MinWidth="820" MinHeight="520"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Microsoft YaHei UI" FontSize="12"
+        Closing="Window_Closing" StateChanged="Window_StateChanged">
+
+    <!--
+        键盘快捷键。删掉工具栏之后，常用操作的入口收敛到菜单 + 右键菜单 + 这里，
+        所以这些绑定不是装饰 —— 它们是"少点两下"的实际补偿。
+        菜单项上的 InputGestureText 只是提示文字，真正生效的是下面这些 KeyBinding。
+
+        ⚠ Modifiers 必须用 '+' 连接（ModifierKeysConverter 只认这个分隔符）。
+          写成 "Control,Shift" 编译器**不会报错**（枚举字符串是运行时解析的），
+          但窗口一构造就抛 XamlParseException: 无法识别的 ModifierKeys，
+          而且那个异常连 ToString() 都失败，现场只剩一句"无法打印异常字符串"。
+    -->
+    <Window.InputBindings>
+        <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewCommand}"/>
+        <KeyBinding Key="F2" Command="{Binding EditCommand}"/>
+        <KeyBinding Key="D" Modifiers="Control" Command="{Binding DuplicateCommand}"/>
+        <!-- Delete 只在列表选中行时生效（命令的 CanExecute 依赖 SelectedTask）。
+             文本框里的 Delete 由控件自己处理，不会冒泡到这里。 -->
+        <KeyBinding Key="Delete" Command="{Binding DeleteCommand}"/>
+        <KeyBinding Key="F9" Command="{Binding RunNowCommand}"/>
+        <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
+        <KeyBinding Key="H" Modifiers="Control+Shift" Command="{Binding OpenRunHistoryCommand}"/>
+        <KeyBinding Key="L" Modifiers="Control" Command="{Binding OpenLogWindowCommand}"/>
+    </Window.InputBindings>
+
+    <Window.Resources>
+        <!--
+            弹层叶子项模板（Role=SubmenuItem）—— 2026-09-24 二次迭代。
+            默认 Aero2 模板为"图标列"预留约 38px（竖线 + 图标位），本项目菜单没有图标，
+            那就是一大片空白。去掉空白的唯一途径是换模板；上一版翻车不是"不该换"，
+            而是"换得残缺"：只给了 Border+ContentPresenter 两件套，既没有快捷键列
+            （Ctrl+N 整列消失），又残留了按图标列定位的竖线（穿字）。
+
+            本版规则：从零写全三列布局（图标 | 标题 | 快捷键提示），不残留任何默认部件；
+            通过 Style.Triggers 按 Role 生效 —— 菜单栏顶层项（TopLevelHeader/TopLevelItem）
+            不命中，仍是系统默认模板。改完必须用探针量弹层坐标（弹层不在窗口可视树）。
+        -->
+        <ControlTemplate x:Key="TsMenuLeafTemplate" TargetType="{x:Type MenuItem}">
+            <Border x:Name="Bd" Margin="4,0" CornerRadius="3"
+                    Background="{TemplateBinding Background}"
+                    Padding="{TemplateBinding Padding}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ContentPresenter x:Name="Icon" ContentSource="Icon" Margin="0,0,6,0"
+                                      VerticalAlignment="Center" SnapsToDevicePixels="True"/>
+                    <ContentPresenter Grid.Column="1" ContentSource="Header"
+                                      VerticalAlignment="Center"
+                                      RecognizesAccessKey="True" SnapsToDevicePixels="True"/>
+                    <TextBlock Grid.Column="2" Text="{TemplateBinding InputGestureText}"
+                               Margin="24,0,0,0" VerticalAlignment="Center" Foreground="#666666"/>
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter TargetName="Bd" Property="Background" Value="#1F26A0DA"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                </Trigger>
+                <Trigger Property="Icon" Value="{x:Null}">
+                    <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- 只有 Role=SubmenuItem（弹层里的叶子项）命中换模板；其余 Role 走主题默认 -->
+        <Style x:Key="TsMenuLeafStyle" TargetType="{x:Type MenuItem}"
+               BasedOn="{StaticResource {x:Type MenuItem}}">
+            <Style.Triggers>
+                <Trigger Property="Role" Value="SubmenuItem">
+                    <Setter Property="Template" Value="{StaticResource TsMenuLeafTemplate}"/>
+                    <Setter Property="Padding" Value="10,3,10,4"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 弹层分隔线：全宽细线，不再按图标列缩进（默认缩进会让分隔线看起来"断在半路"） -->
+        <Style x:Key="TsMenuSeparator" TargetType="{x:Type Separator}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Separator}">
+                        <Rectangle Height="1" Margin="10,3,10,3" Fill="#E0E0E0"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
+            任务列表的业务语义色：停用整行变灰（一眼分出"不参与调度"）、失败整行标红。
+            表格基础样式（TsDataGrid/列头/行/单元格/文本）已上移 Theme.xaml 全局，
+            与运行记录窗口共用 —— 改表格观感去 Theme。
+        -->
+        <Style x:Key="TsRowMain" TargetType="DataGridRow" BasedOn="{StaticResource TsRow}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Enabled}" Value="False">
+                    <Setter Property="Foreground" Value="#A8A8A8"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsLastRunFailed}" Value="True">
+                    <Setter Property="Foreground" Value="#C62828"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 菜单/状态栏：灰 chrome 条衬托白工作区（经典工具软件分区） -->
+        <Style TargetType="Menu">
+            <Setter Property="Background" Value="{StaticResource ChromeBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Padding" Value="6,2"/>
+        </Style>
+        <Style TargetType="StatusBar">
+            <Setter Property="Background" Value="{StaticResource ChromeBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0,1,0,0"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- ===== 菜单栏 ===== -->
+        <Menu DockPanel.Dock="Top" Padding="4,2">
+            <!--
+                ⚠ 历史教训（2026-09-24）：给 Role=SubmenuItem 换"精简"模板却不带快捷键列、
+                还残留图标列坐标系的竖线 → 竖线穿字、Ctrl+N 提示整列消失。
+                现行方案：完整三列模板在 Window.Resources（TsMenuLeafTemplate），
+                按 Role 触发、只作用于弹层叶子项；菜单栏顶层项仍是系统默认模板。
+                这里的隐式样式只承担两件事：继承弹层项样式 + 把弹出位置钉在菜单项正下方。
+            -->
+            <Menu.Resources>
+                <Style TargetType="MenuItem" BasedOn="{StaticResource TsMenuLeafStyle}">
+                    <!-- 只为了把弹出位置钉在菜单项正下方（默认 Bottom 会与菜单栏重叠几像素） -->
+                    <EventSetter Event="Loaded" Handler="OnMenuItemLoaded"/>
+                </Style>
+            </Menu.Resources>
+
+            <MenuItem Header="文件(_F)">
+                <MenuItem Header="新建任务" Command="{Binding NewCommand}" InputGestureText="Ctrl+N"/>
+                <MenuItem Header="刷新列表" Command="{Binding RefreshCommand}" InputGestureText="F5"/>
+                <Separator Style="{StaticResource TsMenuSeparator}"/>
+                <MenuItem Header="运行记录…" Command="{Binding OpenRunHistoryCommand}"
+                          InputGestureText="Ctrl+Shift+H"/>
+                <MenuItem Header="运行日志…" Command="{Binding OpenLogWindowCommand}"
+                          InputGestureText="Ctrl+L"/>
+                <MenuItem Header="设置…" Command="{Binding OpenSettingsCommand}"/>
+                <Separator Style="{StaticResource TsMenuSeparator}"/>
+                <MenuItem Header="退出" Command="{Binding ExitCommand}"/>
+            </MenuItem>
+
+            <MenuItem Header="任务(_T)">
+                <MenuItem Header="编辑" Command="{Binding EditCommand}" InputGestureText="F2"/>
+                <MenuItem Header="复制一份" Command="{Binding DuplicateCommand}" InputGestureText="Ctrl+D"/>
+                <MenuItem Header="删除" Command="{Binding DeleteCommand}" InputGestureText="Delete"/>
+                <Separator Style="{StaticResource TsMenuSeparator}"/>
+                <MenuItem Header="启用 / 停用" Command="{Binding ToggleCommand}"/>
+                <MenuItem Header="立即运行" Command="{Binding RunNowCommand}" InputGestureText="F9"/>
+            </MenuItem>
+
+            <MenuItem Header="引擎(_E)">
+                <MenuItem Header="启动引擎" Command="{Binding StartEngineCommand}"/>
+                <MenuItem Header="停止引擎" Command="{Binding StopEngineCommand}"/>
+            </MenuItem>
+
+            <!--
+                服务菜单：四项的可用状态完全跟着服务真实状态走（见 MainViewModel 的 CanExecute）。
+                顶部那行状态说明是必要的 —— 菜单项变灰时，用户得知道是"没装"还是"正在处理"。
+            -->
+            <MenuItem Header="服务(_S)">
+                <MenuItem Header="{Binding ServiceMenuStatus}" IsEnabled="False"/>
+                <Separator Style="{StaticResource TsMenuSeparator}"/>
+                <MenuItem Header="安装服务" Command="{Binding InstallServiceCommand}"
+                          ToolTip="注册成开机自启的 Windows 后台服务（会弹一次 UAC 提权）。&#10;程序被挪过目录、注册的路径已经不对时，用它重新注册。"/>
+                <MenuItem Header="卸载服务" Command="{Binding UninstallServiceCommand}"
+                          ToolTip="停止并删除后台服务（会弹一次 UAC 提权）。&#10;任务配置与运行记录都在 %ProgramData%\TaskScheduler 下，卸载服务不会动它们。"/>
+                <Separator Style="{StaticResource TsMenuSeparator}"/>
+                <MenuItem Header="启动服务" Command="{Binding StartServiceCommand}"
+                          ToolTip="启动已安装的后台服务。服务会在开机时自动启动，正常情况下不需要手动点。"/>
+                <MenuItem Header="停止服务" Command="{Binding StopServiceCommand}"
+                          ToolTip="停掉后台服务后，任务不再被后台执行。&#10;想继续跑就切到「引擎 → 启动引擎」，用本地模式托管。"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- ===== 状态栏 ===== -->
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBarItem>
+                <TextBlock Text="{Binding EngineState, StringFormat=引擎：{0}}"/>
+            </StatusBarItem>
+            <StatusBarItem>
+                <TextBlock Text="{Binding Tasks.Count, StringFormat=任务数：{0}}"/>
+            </StatusBarItem>
+            <StatusBarItem>
+                <TextBlock Text="{Binding HostMode, StringFormat=托管：{0}}"/>
+            </StatusBarItem>
+            <StatusBarItem>
+                <TextBlock Text="{Binding ServiceState, StringFormat=服务：{0}}"/>
+            </StatusBarItem>
+            <StatusBarItem HorizontalContentAlignment="Stretch">
+                <TextBlock Text="{Binding LastEvent}" Foreground="#777777" TextTrimming="CharacterEllipsis"
+                           ToolTip="最近一条运行动态（完整日志请开「日志」窗口）"/>
+            </StatusBarItem>
+        </StatusBar>
+
+        <!-- ===== 任务列表（含空态提示：空列表的一片白必须告诉用户去哪新建） ===== -->
+        <!-- 通栏表格：Margin=0 让列头直接贴住菜单栏下沿（services.msc/任务管理器的做法），
+             留白会在灰 chrome 和列头之间漏出一条白缝 -->
+        <Grid>
+            <DataGrid x:Name="TasksGrid"
+                  Style="{StaticResource TsDataGrid}"
+                  ColumnHeaderStyle="{StaticResource TsColumnHeader}"
+                  RowStyle="{StaticResource TsRowMain}"
+                  CellStyle="{StaticResource TsCell}"
+                  ItemsSource="{Binding Tasks}"
+                  SelectedItem="{Binding SelectedTask, Mode=TwoWay}"
+                  AutoGenerateColumns="False" IsReadOnly="True"
+                  SelectionMode="Single"
+                  HeadersVisibility="Column" RowHeaderWidth="0"
+                  CanUserAddRows="False" CanUserDeleteRows="False"
+                  FontSize="{Binding TaskListFontSize}"
+                  MouseDoubleClick="TasksGrid_MouseDoubleClick">
+            <!-- 停用变灰 / 失败变红的行级语义色已并入 Window.Resources 的 TsRow -->
+
+            <DataGrid.ContextMenu>
+                <!-- ItemContainerStyle：右键菜单的项与菜单栏弹层用同一套叶子模板。
+                     ⚠ Separator 必须显式套 TsMenuSeparator —— 否则 ItemContainerStyle
+                     （TargetType=MenuItem）会赋到 Separator 上，运行时抛类型不匹配。 -->
+                <ContextMenu ItemContainerStyle="{StaticResource TsMenuLeafStyle}"
+                             Loaded="OnContextMenuLoaded">
+                    <!-- 右键菜单也带上快捷键提示：与菜单栏同名命令的写法保持一致，
+                         用户看到的"编辑 F2"在两处是同一个说法 —— 否则一边有提示一边没有，
+                         会让人怀疑右键那个到底有没有快捷键。 -->
+                    <MenuItem Header="编辑" InputGestureText="F2"
+                              Command="{Binding PlacementTarget.DataContext.EditCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <MenuItem Header="复制一份" InputGestureText="Ctrl+D"
+                              Command="{Binding PlacementTarget.DataContext.DuplicateCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <MenuItem Header="删除" InputGestureText="Delete"
+                              Command="{Binding PlacementTarget.DataContext.DeleteCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <Separator Style="{StaticResource TsMenuSeparator}"/>
+                    <MenuItem Header="启用 / 停用"
+                              Command="{Binding PlacementTarget.DataContext.ToggleCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <MenuItem Header="立即运行" InputGestureText="F9"
+                              Command="{Binding PlacementTarget.DataContext.RunNowCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                </ContextMenu>
+            </DataGrid.ContextMenu>
+
+            <DataGrid.Columns>
+                <!-- 用文字列而不是 DataGridCheckBoxColumn：整表 IsReadOnly="True"，
+                     复选框列看起来能点、点了没反应，容易让人以为程序卡住 -->
+                <DataGridTextColumn Header="状态" Binding="{Binding StatusText}" Width="66"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+                <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="170"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+                <DataGridTextColumn Header="触发器" Binding="{Binding TriggerDescription}" Width="220"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+                <DataGridTextColumn Header="动作" Binding="{Binding ActionDescription}" Width="220"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+                <DataGridTextColumn Header="条件" Binding="{Binding ConditionDescription}" Width="160"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+                <DataGridTextColumn Header="上次运行" Binding="{Binding LastRunTime, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}" Width="140"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+                <DataGridTextColumn Header="结果" Binding="{Binding LastRunResult}" Width="140"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+                <DataGridTextColumn Header="下次运行" Binding="{Binding NextRunText}" Width="140"
+                                    ElementStyle="{StaticResource TsCellText}"/>
+            </DataGrid.Columns>
+            </DataGrid>
+
+            <!-- 空态：0 任务时列表区一片白，必须给出行动指引。
+                 ⚠ 默认 Hidden 必须放 Style.Setter —— 本地值优先级高于 Style 触发器，
+                 写成 Attribute 会永远压住 DataTrigger 的 Visible（踩过）。 -->
+            <TextBlock Text="还没有任务。菜单「文件 → 新建任务」，或按 Ctrl+N 创建第一个任务。"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Foreground="{StaticResource MetaFgBrush}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Hidden"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Tasks.Count}" Value="0">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </Grid>
+    </DockPanel>
+</Window>

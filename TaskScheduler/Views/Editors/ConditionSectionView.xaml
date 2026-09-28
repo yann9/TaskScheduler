@@ -1,0 +1,290 @@
+﻿<UserControl x:Class="TaskScheduler.Views.Editors.ConditionSectionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Grid.IsSharedSizeScope="True">
+    <StackPanel>
+
+        <!-- ===== 条件列表 ===== -->
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource CardTitle}" Text="执行条件（触发后、动作前需全部满足；可留空）"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="添加条件"/>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                        <ComboBox Width="190" ItemsSource="{Binding ConditionTypes}"
+                                  SelectedItem="{Binding NewConditionType}"
+                                  ItemTemplate="{StaticResource EnumItem}"/>
+                        <Button Content="添加" Command="{Binding AddConditionCommand}" Width="70"/>
+                        <Button Content="清空全部" Command="{Binding ClearConditionsCommand}" Width="88"/>
+                    </StackPanel>
+
+                    <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,2,0,8">
+                        <ListBox MinHeight="34" MaxHeight="150"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ItemsSource="{Binding Task.Conditions}"
+                                 SelectedItem="{Binding SelectedCondition, Mode=TwoWay}">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Describe}"
+                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                        <Button Grid.Column="1" Content="删除" Width="60" Padding="8,0"
+                                                Command="{Binding DataContext.RemoveConditionCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                CommandParameter="{Binding}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock Text="（暂无条件，触发后直接执行动作）" Foreground="#8A8A8A" Margin="8,0,0,0"
+                                   VerticalAlignment="Center" IsHitTestVisible="False"
+                                   Visibility="{Binding HasNoConditions, Converter={StaticResource BoolVis}}"/>
+                    </Grid>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource Hint}"
+                               Text="多个条件之间是「与」的关系：全部满足才会执行动作。需要「不是」的语义时，选中条件后在下面勾「取反」。"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== 选中条件的详细设置 ===== -->
+        <Border Style="{StaticResource Card}"
+                Visibility="{Binding HasSelectedCondition, Converter={StaticResource BoolVis}}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource CardTitle}" Text="条件设置"/>
+
+                <CheckBox Content="取反：条件【不】满足时才执行"
+                          IsChecked="{Binding SelectedConditionNegate}"
+                          ToolTip="勾上后语义反转。例如「电源状态：接通电源」勾取反，就变成「没接电源时才执行」；&#10;「本机 IP 为 10.1.22.19」勾取反，就变成「不在公司网段时才执行」。&#10;有了它就不必为每种条件再单独做一个「非」版本。"/>
+
+                <!-- 一句话小结，让"取反 + 条件"的组合读起来是人话 -->
+                <TextBlock Style="{StaticResource SummaryBar}" Text="{Binding ConditionSummary}"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 网络连通 -->
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="主机"
+                               Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=NetworkConnected}"/>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"
+                                Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=NetworkConnected}">
+                        <TextBox Width="200" Text="{Binding NetCond.Host, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="端口" VerticalAlignment="Top" Margin="12,6,8,0" Foreground="#3C4043"/>
+                        <TextBox Width="80" Text="{Binding NetCond.Port, UpdateSourceTrigger=PropertyChanged}"/>
+                    </StackPanel>
+
+                    <!-- 电源 -->
+                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="要求供电"
+                               Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=Power}"/>
+                    <ComboBox Grid.Row="1" Grid.Column="1" Width="190" HorizontalAlignment="Left"
+                              ItemsSource="{Binding PowerStates}" SelectedItem="{Binding PowerCond.Required}"
+                              ItemTemplate="{StaticResource EnumItem}"
+                              Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=Power}"/>
+
+                    <!-- 进程运行中 -->
+                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="进程名"
+                               Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=ProcessRunning}"/>
+                    <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal"
+                                Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=ProcessRunning}">
+                        <TextBox Width="200" Text="{Binding ProcCond.ProcessName, UpdateSourceTrigger=PropertyChanged}"/>
+                        <CheckBox Content="要求该进程正在运行（取消勾选则要求它没在跑）" Margin="12,4,0,8"
+                                  IsChecked="{Binding ProcCond.MustBeRunning}"/>
+                    </StackPanel>
+
+                    <!-- 本机 IP -->
+                    <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="本机 IP"
+                               Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=LocalIp}"/>
+                    <TextBox Grid.Row="3" Grid.Column="1"
+                             Text="{Binding LocalIpCond.IpAddress, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="支持四种写法，多个用逗号分隔，命中任意一个即通过：&#10;  10.1.22.19       精确匹配一个地址&#10;  10.1.22.0/24     网段前缀（CIDR）&#10;  10.1.22.         裸前缀，等价于 10.1.22.0/24&#10;  10.1.22.*        通配"
+                             Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=LocalIp}"/>
+                    <StackPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
+                                Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=LocalIp}">
+                        <!-- 实时体检：把表达式翻译成人话 + 报当前是否命中；有写错的条目就标红。
+                             样式写成自包含的（不 BasedOn 任何字典资源），避免合并字典里的键在这里解析不到。 -->
+                        <TextBlock Text="{Binding IpPatternHint}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="TextWrapping" Value="Wrap"/>
+                                    <Setter Property="FontSize" Value="11.5"/>
+                                    <Setter Property="Foreground" Value="#777777"/>
+                                    <Setter Property="Margin" Value="0,4,0,0"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IpPatternIsValid}" Value="False">
+                                            <Setter Property="Foreground" Value="#C62828"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="{Binding CurrentLocalIps, StringFormat=当前本机 IP：{0}}"/>
+                    </StackPanel>
+
+                    <!-- 磁盘空间 -->
+                    <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="磁盘分区"
+                               Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=DiskSpace}"/>
+                    <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal"
+                                Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=DiskSpace}">
+                        <ComboBox Width="150" IsEditable="True" Margin="0,0,12,8"
+                                  ItemsSource="{Binding AvailableDrives}"
+                                  Text="{Binding DiskCond.Drive, UpdateSourceTrigger=PropertyChanged}"
+                                  ToolTip="下拉列出本机现有分区，也可以手填（如 D:）。留空表示系统盘。&#10;映射的网络驱动器是会话级的，服务模式下看不到。"/>
+                        <CheckBox Content="剩余不少于" Margin="0,4,8,8" VerticalAlignment="Top"
+                                  IsChecked="{Binding DiskCond.RequireAtLeast}"/>
+                        <TextBox Width="90" Text="{Binding DiskCond.ThresholdMB, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="MB（1 GB = 1024 MB；取消勾选即「不足这么多时才执行」）"
+                                   VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                    </StackPanel>
+
+                    <!-- 文件 / 目录状态 -->
+                    <TextBlock Grid.Row="6" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="路径"
+                               Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=FilePath}"/>
+                    <Grid Grid.Row="6" Grid.Column="1"
+                          Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=FilePath}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding FileCond.Path, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Button Grid.Column="1" Content="浏览…" Width="76" Command="{Binding BrowseConditionPathCommand}"/>
+                    </Grid>
+
+                    <TextBlock Grid.Row="7" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="判定方式"
+                               Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=FilePath}"/>
+                    <StackPanel Grid.Row="7" Grid.Column="1" Orientation="Horizontal"
+                                Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=FilePath}">
+                        <ComboBox Width="200" ItemsSource="{Binding FileStateModes}" SelectedItem="{Binding FileCond.Mode}"
+                                  ItemTemplate="{StaticResource EnumItem}"/>
+                        <TextBox Width="90" Margin="8,0,0,8" Text="{Binding FileCond.Value, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="分钟 / MB（按上面的判定方式解释）" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                    </StackPanel>
+
+                    <!-- 允许时段 -->
+                    <TextBlock Grid.Row="8" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="允许时段"
+                               Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=TimeWindow}"/>
+                    <StackPanel Grid.Row="8" Grid.Column="1"
+                                Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=TimeWindow}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox Width="90"
+                                     Text="{Binding WindowCond.Start, Converter={StaticResource TsConv}, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="24 小时制，格式 HH:mm，例如 08:00。&#10;输入不合法（如只写 8）不会生效，会保留原值。"/>
+                            <TextBlock Text="至" VerticalAlignment="Top" Margin="8,6,8,0" Foreground="#3C4043"/>
+                            <TextBox Width="90"
+                                     Text="{Binding WindowCond.End, Converter={StaticResource TsConv}, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="24 小时制，格式 HH:mm，例如 20:00。&#10;输入不合法（如只写 8）不会生效，会保留原值。"/>
+                            <TextBlock Text="（结束早于开始表示跨午夜）" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                        </StackPanel>
+                        <ItemsControl ItemsSource="{Binding WindowWeekdayOptions}" Margin="0,4,0,8">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked, Mode=TwoWay}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- HTTP 健康检查 -->
+                    <TextBlock Grid.Row="9" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="URL"
+                               Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=HttpHealth}"/>
+                    <TextBox Grid.Row="9" Grid.Column="1"
+                             Text="{Binding HttpCond.Url, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="要探测的地址，例如 http://10.1.22.5:8080/health。&#10;可以用它判断「上游服务已经起来了」再继续部署 / 同步。"
+                             Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=HttpHealth}"/>
+
+                    <TextBlock Grid.Row="10" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="探测要求"
+                               Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=HttpHealth}"/>
+                    <StackPanel Grid.Row="10" Grid.Column="1"
+                                Visibility="{Binding SelectedConditionType, Converter={StaticResource EnumVis}, ConverterParameter=HttpHealth}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox Width="70" Text="{Binding HttpCond.ExpectedStatus, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="期望的 HTTP 状态码，默认 200。&#10;填 0 表示不校验状态码 —— 只要能连上拿到响应就算通过。"/>
+                            <TextBlock Text="状态码（0 = 不校验）；超时" VerticalAlignment="Top" Margin="8,6,8,0" Foreground="#777777"/>
+                            <TextBox Width="60" Text="{Binding HttpCond.TimeoutSeconds, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Text="秒" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox Width="220" Text="{Binding HttpCond.BodyContains, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Text="响应体需包含（留空表示不校验，区分大小写）" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== 条件等待窗口（与具体条件类型无关，始终可见） ===== -->
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource CardTitle}" Text="条件等待"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="等待窗口"/>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                        <TextBox Width="70" Text="{Binding Task.ConditionWaitSeconds, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="秒内每" VerticalAlignment="Top" Margin="8,6,8,0" Foreground="#3C4043"/>
+                        <TextBox Width="60" Text="{Binding Task.ConditionRetrySeconds, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="秒重试一次（0 = 不等待，一次不满足就跳过本次）"
+                                   VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource Hint}"
+                               Text="条件在触发那一刻开始判定。填了等待秒数后，不满足不会立刻跳过，而是在窗口内反复重试 —— 网卡刚起来还没拿到 IP、笔记本合盖时刚好没插电这类「等一会儿就满足」的情况，不会白白错过一整个执行周期。"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource Footnote}"
+                               Text="服务模式限制：「前台窗口」在服务模式下永远取不到值（Session 0 没有交互桌面）；映射的网络驱动器（Z: 这类）也是会话级的，服务模式下看不到。依赖它们的任务建议改用「登录时自动启动」运行。「电源状态」若读不到有效值（部分系统的服务模式），按「满足」处理 —— 宁可执行，也不静默不执行。HTTP 探测、服务状态、网络类型、系统负载在两种模式下都可用。"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+</UserControl>

@@ -1,0 +1,261 @@
+﻿<UserControl x:Class="TaskScheduler.Views.Editors.ActionSectionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Grid.IsSharedSizeScope="True">
+    <StackPanel>
+
+        <!-- ===== 动作类型 ===== -->
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource CardTitle}" Text="触发后做什么"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="动作类型"/>
+                    <ComboBox Grid.Row="0" Grid.Column="1" Width="190" HorizontalAlignment="Left"
+                              ItemsSource="{Binding ActionTypes}" SelectedItem="{Binding SelectedActionType}"
+                              ItemTemplate="{StaticResource EnumItem}"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Hint}"
+                               Text="切换类型不会丢掉已经填好的内容：切回原来那一类，之前填的还在。"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== 运行程序 ===== -->
+        <Border Style="{StaticResource Card}"
+                Visibility="{Binding SelectedActionType, Converter={StaticResource EnumVis}, ConverterParameter=RunProgram}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource CardTitle}" Text="运行程序 / 脚本"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="程序路径"/>
+                    <Grid Grid.Row="0" Grid.Column="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding RunActionObj.Program, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Button Grid.Column="1" Content="浏览…" Width="76" Command="{Binding BrowseProgramCommand}"/>
+                    </Grid>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="参数"/>
+                    <TextBox Grid.Row="1" Grid.Column="1"
+                             Text="{Binding RunActionObj.Arguments, UpdateSourceTrigger=PropertyChanged}"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="工作目录"/>
+                    <Grid Grid.Row="2" Grid.Column="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding RunActionObj.WorkingDirectory, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Button Grid.Column="1" Content="浏览…" Width="76" Command="{Binding BrowseWorkingDirCommand}"/>
+                    </Grid>
+
+                    <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal">
+                        <CheckBox Content="等待程序退出" IsChecked="{Binding RunActionObj.WaitForExit}"
+                                  ToolTip="勾选（默认）时会等子进程结束，并采集它的标准输出 / 退出码，输出会写进「运行记录」。&#10;不勾选则只负责把它拉起来，不等结果（脚本里再 nohup / start 时用）。"/>
+                        <TextBlock Text="超时" VerticalAlignment="Top" Margin="16,6,8,0" Foreground="#3C4043"/>
+                        <TextBox Width="70" Text="{Binding RunActionObj.TimeoutSeconds, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="秒（0 = 不限时）" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                    </StackPanel>
+
+                    <CheckBox Grid.Row="4" Grid.Column="1" Content="退出码非 0 时算失败"
+                              IsChecked="{Binding RunActionObj.FailOnNonZeroExitCode}"
+                              ToolTip="勾选（默认）：脚本返回非 0 会在「运行记录」里记成失败并弹提示。&#10;取消勾选：非 0 也算成功（例如 grep 没匹配到内容会返回 1，那是预期结果）。"/>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource Hint}"
+                               Text="提示：跑 .sh 脚本请填 Git 自带的 bash（C:\Program Files\Git\bin\bash.exe），参数用 -lc &quot;脚本路径&quot;。不要用 git-bash.exe —— 它会弹一个终端窗口，且拿不到退出码。"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== HTTP 请求 ===== -->
+        <Border Style="{StaticResource Card}"
+                Visibility="{Binding SelectedActionType, Converter={StaticResource EnumVis}, ConverterParameter=HttpRequest}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource CardTitle}" Text="HTTP 请求"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="URL"/>
+                    <TextBox Grid.Row="0" Grid.Column="1"
+                             Text="{Binding HttpActionObj.Url, UpdateSourceTrigger=PropertyChanged}"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="方法"/>
+                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                        <ComboBox Width="140" ItemsSource="{Binding HttpMethods}" SelectedItem="{Binding HttpActionObj.Method}"/>
+                        <TextBlock Text="超时" VerticalAlignment="Top" Margin="16,6,8,0" Foreground="#3C4043"/>
+                        <TextBox Width="70" Text="{Binding HttpActionObj.TimeoutSeconds, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="秒" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="Content-Type"/>
+                    <TextBox Grid.Row="2" Grid.Column="1"
+                             Text="{Binding HttpActionObj.ContentType, UpdateSourceTrigger=PropertyChanged}"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="请求体"/>
+                    <TextBox Grid.Row="3" Grid.Column="1" Height="80" TextWrapping="Wrap" AcceptsReturn="True"
+                             VerticalContentAlignment="Top"
+                             Text="{Binding HttpActionObj.Body, UpdateSourceTrigger=PropertyChanged}"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource Hint}"
+                               Text="返回的响应摘要（状态码、正文前若干字符）会写进「运行记录」，排障时不用自己去抓包。"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== 桌面通知 ===== -->
+        <Border Style="{StaticResource Card}"
+                Visibility="{Binding SelectedActionType, Converter={StaticResource EnumVis}, ConverterParameter=Notification}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource CardTitle}" Text="桌面通知"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="标题"/>
+                    <TextBox Grid.Row="0" Grid.Column="1"
+                             Text="{Binding NotifyActionObj.Title, UpdateSourceTrigger=PropertyChanged}"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="内容"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Height="80" TextWrapping="Wrap" AcceptsReturn="True"
+                             VerticalContentAlignment="Top"
+                             Text="{Binding NotifyActionObj.Message, UpdateSourceTrigger=PropertyChanged}"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource Hint}"
+                               Text="通知以托盘气泡的形式弹出，只在当前用户会话里可见。服务模式（Session 0）下没有桌面，会退化为写日志。"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== 文件操作 ===== -->
+        <Border Style="{StaticResource Card}"
+                Visibility="{Binding SelectedActionType, Converter={StaticResource EnumVis}, ConverterParameter=FileOperation}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource CardTitle}" Text="文件操作"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="操作"/>
+                    <ComboBox Grid.Row="0" Grid.Column="1" Width="140" HorizontalAlignment="Left"
+                              ItemsSource="{Binding FileOps}" SelectedItem="{Binding FileActionObj.Operation}"
+                              ItemTemplate="{StaticResource EnumItem}"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="源路径"/>
+                    <Grid Grid.Row="1" Grid.Column="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding FileActionObj.Source, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Button Grid.Column="1" Content="浏览…" Width="76" Command="{Binding BrowseSourceCommand}"/>
+                    </Grid>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="目标路径"/>
+                    <Grid Grid.Row="2" Grid.Column="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding FileActionObj.Destination, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Button Grid.Column="1" Content="浏览…" Width="76" Command="{Binding BrowseDestCommand}"/>
+                    </Grid>
+
+                    <CheckBox Grid.Row="3" Grid.Column="1" Content="覆盖已存在的目标文件"
+                              IsChecked="{Binding FileActionObj.Overwrite}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== 模拟输入 ===== -->
+        <Border Style="{StaticResource Card}"
+                Visibility="{Binding SelectedActionType, Converter={StaticResource EnumVis}, ConverterParameter=InputSimulation}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource CardTitle}" Text="模拟输入"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="类型"/>
+                    <ComboBox Grid.Row="0" Grid.Column="1" Width="190" HorizontalAlignment="Left"
+                              ItemsSource="{Binding InputKinds}" SelectedItem="{Binding InputActionObj.Kind}"
+                              ItemTemplate="{StaticResource EnumItem}"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="文本 / 快捷键"/>
+                    <TextBox Grid.Row="1" Grid.Column="1"
+                             Text="{Binding InputActionObj.Text, UpdateSourceTrigger=PropertyChanged}"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="鼠标坐标 X"/>
+                    <TextBox Grid.Row="2" Grid.Column="1" Width="90" HorizontalAlignment="Left"
+                             Text="{Binding InputActionObj.MouseX, UpdateSourceTrigger=PropertyChanged}"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="鼠标坐标 Y"/>
+                    <TextBox Grid.Row="3" Grid.Column="1" Width="90" HorizontalAlignment="Left"
+                             Text="{Binding InputActionObj.MouseY, UpdateSourceTrigger=PropertyChanged}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+</UserControl>

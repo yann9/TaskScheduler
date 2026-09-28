@@ -1,0 +1,149 @@
+﻿<Window x:Class="TaskScheduler.Views.TaskEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sec="clr-namespace:TaskScheduler.ViewModels.Sections"
+        xmlns:editors="clr-namespace:TaskScheduler.Views.Editors"
+        Title="任务设置" Height="700" Width="900" MinWidth="740" MinHeight="560"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
+    <Window.Resources>
+        <!--
+            编辑器在全局主题（Styles/Theme.xaml）之上只补充排版语义：
+            字段间距、控件顶端对齐。控件尺寸/颜色全部由全局隐式样式接管 ——
+            改观感去 Theme.xaml，别在这里再写一份。
+
+            带 x:Key 的样式（Card / FieldLabel / Hint / EnumItem …）在 Theme / EditorStyles
+            （App 级合并）：分区 UserControl 解析自身 XAML 时还没有父级，拿不到
+            Window.Resources 里的带键资源，所以必须放应用级。
+            下面这些隐式样式靠运行时沿逻辑树查找，放在窗口级正好只作用于编辑器。
+        -->
+        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+        <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="VerticalAlignment" Value="Top"/>
+        </Style>
+        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Setter Property="Margin" Value="6,0,0,0"/>
+        </Style>
+
+        <!-- 分区 → 视图 的映射。加一个新分区只需要在这里加一行。 -->
+        <DataTemplate DataType="{x:Type sec:TriggerSectionViewModel}">
+            <editors:TriggerSectionView/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type sec:ConditionSectionViewModel}">
+            <editors:ConditionSectionView/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type sec:ActionSectionViewModel}">
+            <editors:ActionSectionView/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type sec:AdvancedSectionViewModel}">
+            <editors:AdvancedSectionView/>
+        </DataTemplate>
+    </Window.Resources>
+
+    <DockPanel LastChildFill="True">
+
+        <!-- ===== 顶部：任务名 + 启用开关（任何分区下都看得到，不需要切页） ===== -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource ChromeBgBrush}"
+                BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="0,0,0,1"
+                Padding="16,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="任务名称" VerticalAlignment="Center" Margin="0,0,10,0"
+                           Foreground="#3C4043"/>
+                <TextBox Grid.Column="1" Height="28" Margin="0" VerticalContentAlignment="Center"
+                         Text="{Binding Task.Name, UpdateSourceTrigger=PropertyChanged}"/>
+
+                <CheckBox Grid.Column="2" Content="启用此任务" Margin="16,0,0,0" VerticalAlignment="Center"
+                          IsChecked="{Binding Task.Enabled}"
+                          ToolTip="取消勾选后任务保留但不参与调度：触发器会被停掉、排期显示为空。&#10;想临时停掉某个任务又不想删掉它，用这个。"/>
+
+                <TextBlock Grid.Column="3" VerticalAlignment="Center" Margin="18,0,0,0" Foreground="#777777"
+                           Text="{Binding Task.NextRunText, StringFormat=下次运行：{0}}"/>
+            </Grid>
+        </Border>
+
+        <!-- ===== 底部：确定 / 取消 ===== -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource ChromeBgBrush}"
+                BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="0,1,0,0"
+                Padding="16,10">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="确定" Width="90" Margin="0,0,8,0"
+                        Style="{StaticResource AccentButton}" IsDefault="True" Click="Ok_Click"/>
+                <Button Content="取消" Width="90" IsCancel="True" Click="Cancel_Click"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== 主体：左导航 + 右内容 ===== -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="196"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 导航区：灰 chrome 底 + 分隔线（经典资源管理器左侧栏的做法） -->
+            <Border Grid.Column="0" Background="{StaticResource ChromeBgBrush}"
+                    BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="0,0,1,0">
+                <ListBox ItemsSource="{Binding Sections}"
+                         SelectedItem="{Binding SelectedSection, Mode=TwoWay}"
+                         Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         Padding="8">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="10,8"/>
+                            <Setter Property="Margin" Value="0,0,0,4"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="Bd" CornerRadius="0" Background="Transparent"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#E0E0E0"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SelBgBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#1F2937"/>
+                                <!-- 摘要让用户不切页也能看清整体配置 -->
+                                <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="#777777"
+                                           TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+
+            <!-- 内容区：只渲染当前分区。各分区是独立的 UserControl，
+                 改其中一页的字段不会碰到其他页的绑定。 -->
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="16,16,16,20">
+                <ContentControl Content="{Binding SelectedSection}"/>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</Window>
