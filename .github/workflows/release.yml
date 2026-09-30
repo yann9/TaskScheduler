@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version, e.g. 1.0.0 (a tag v<version> will be created)'
+        description: 'Release version, e.g. 1.3.0 (tag v<version> is created/moved onto the branch head)'
         required: true
         default: '1.0.0'
 
@@ -16,7 +16,36 @@ permissions:
   contents: write
 
 jobs:
+  # workflow_dispatch 的入口职责只有一件事：把 v<version> tag 建好/挪到当前分支
+  # 顶端并推送。真正的构建发布统一由 tag push 事件触发（build-and-release 的 if）。
+  #
+  # 为什么不让 dispatch 直接构建发布：说明生成用的是 HEAD（分支顶端），而
+  # softprops 创建 release 时会挂到"已存在的同名 tag"上 —— tag 停在旧 commit 时
+  # 就会发成"说明是新的、产物挂在旧 tag"的错位 release（v1.3.0 踩过：旧 tag 还在
+  # 两天前的 commit 上，Full Changelog 因此回退到 v1.1.0）。tag 必先就位，
+  # 发布永远走 tag-push 单一路径，两者就不会再脱节。
+  tag-on-dispatch:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create or move tag onto this commit and push
+        shell: pwsh
+        run: |
+          $tag = "v$('${{ github.event.inputs.version }}'.Trim())"
+          # -f：同名 tag 已存在时必须挪过来，而不是报错后悄悄把 release 挂到旧位置
+          git tag -f $tag ${{ github.sha }}
+          git push origin $tag --force
+          Write-Host "Tag $tag now points at ${{ github.sha }}; the tag-push run will build and release."
+
   build-and-release:
+    if: github.event_name == 'push'
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -42,11 +71,8 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            $v = '${{ github.event.inputs.version }}'
-          } else {
-            $v = $env:GITHUB_REF_NAME -replace '^v', ''
-          }
+          # Only tag pushes reach this job: the tag name is the single source of truth.
+          $v = $env:GITHUB_REF_NAME -replace '^v', ''
           $v = $v.Trim()
           echo "version=$v" >> $env:GITHUB_OUTPUT
           echo "Building release version: $v"
