@@ -126,6 +126,16 @@ jobs:
           $range = if ($prev) { "$prev..HEAD" } else { "HEAD" }
           Write-Host "Notes range: $range (prev=$prev)"
 
+          # Guard: a tag that points at the same commit as the previous release
+          # produces an EMPTY range -> an empty "what's new" body, and GitHub's
+          # auto-notes then walk PAST the same-commit tag for the compare link
+          # (Full Changelog jumped straight back to an older version once).
+          # Fail loudly instead: repoint/delete the tag and push real commits.
+          if ($prev -and -not @(git log "$prev..HEAD" --oneline)) {
+            throw ("No commits between $prev and HEAD: this tag adds no changes. " +
+                   "Delete/repoint the tag and push real commits before releasing.")
+          }
+
           $feat  = [System.Collections.Generic.List[string]]::new()
           $fix   = [System.Collections.Generic.List[string]]::new()
           $other = [System.Collections.Generic.List[string]]::new()

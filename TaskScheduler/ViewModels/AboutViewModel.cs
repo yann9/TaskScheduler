@@ -32,11 +32,18 @@ namespace TaskScheduler.ViewModels
             OpenDataFolderCommand = new RelayCommand(OpenDataFolder);
         }
 
-        /// <summary>优先取 InformationalVersion（CI 可注入），否则退回 AssemblyVersion</summary>
+        /// <summary>
+        /// 优先取 InformationalVersion（发布时由 publish.ps1 经 -p:Version 注入 tag 版本），
+        /// 否则退回 AssemblyVersion。
+        /// 版本号里若带 "+..." 后缀（.NET SDK 在启用源链接类属性时会把提交哈希拼到
+        /// InformationalVersion 后面，形如 "1.3.0+a1b2c3"）一律截掉 —— 界面只展示语义版本。
+        /// </summary>
         private static string ResolveVersion()
         {
             var asm = Assembly.GetExecutingAssembly();
             var info = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            var plus = info?.IndexOf('+') ?? -1;
+            if (plus >= 0) info = info.Substring(0, plus);
             if (!string.IsNullOrWhiteSpace(info)) return info;
             var v = asm.GetName().Version;
             return v == null ? "1.0.0" : v.ToString();

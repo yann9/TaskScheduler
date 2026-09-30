@@ -204,7 +204,25 @@ if ($running.Count -gt 0) {
 }
 
 # --------------------------------------------------------------- 1) main app
-Invoke-Exe -Path $dotnet -ExeArgs (@("publish", $mainProj) + $commonArgs + @("-o", $dist))
+# Read TS_VERSION from the .nsi (CI patches it from the tag BEFORE this script
+# runs; a local build just gets the static default) and inject it into the
+# managed assemblies via -p:Version. Without this the exe keeps the static
+# 1.0.0 from the .csproj while the installer reports the real version -- and
+# the About window showed "1.0.0" for every release. Same trap as the contract
+# checks above: nothing type-checks this cross-file agreement, so read it from
+# the one place CI already patched and fail loudly if the define is missing.
+$appVersion   = Get-ContractValue $nsiFile '!define\s+TS_VERSION\s+"([^"]+)"' "nsi TS_VERSION"
+$versionParts = @($appVersion -split '[.\-+]' | Where-Object { $_ -match '^\d+$' })
+while ($versionParts.Count -lt 4) { $versionParts += '0' }
+$appVersion4  = ($versionParts[0..3] -join '.')
+Write-Output "App version (nsi TS_VERSION): $appVersion (file version: $appVersion4)"
+
+Invoke-Exe -Path $dotnet -ExeArgs (@("publish", $mainProj) + $commonArgs + @(
+    "-o", $dist,
+    "-p:Version=$appVersion",
+    "-p:FileVersion=$appVersion4",
+    "-p:AssemblyVersion=$appVersion4"
+))
 if ($script:LastExeExit -ne 0) { throw "Main publish failed (exit $script:LastExeExit)" }
 
 # --------------------------------------------------- 2) installer (NSIS)
