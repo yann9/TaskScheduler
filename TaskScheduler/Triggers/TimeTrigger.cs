@@ -333,6 +333,10 @@ namespace TaskScheduler.Triggers
         /// 锚点就会变成"编辑那一刻"，例如每 4 小时的任务在 13:38 改了个动作，
         /// 下次执行就从 14:46 漂移到 17:38，用户看起来就是"到点没跑"。
         /// 只有排期参数真的变了，才应该按新设置重新锚定。
+        ///
+        /// 注意：首次运行参数（FirstRunMode 等）**不在**这个签名里 —— 它们不改变周期本身，
+        /// 混进来会让"只改首次参数"的任务被当成"排期大改"，锚点被无谓重置。
+        /// 首次参数单独用 <see cref="FirstRunSignature"/> 比较。
         /// </summary>
         public string ScheduleSignature() => string.Join("|",
             (int)Kind,
@@ -343,6 +347,18 @@ namespace TaskScheduler.Triggers
             (int)MonthlyKind, MonthlyDay, MonthlyNth, (int)MonthlyWeekday, MonthlyTime,
             IntervalValue, (int)IntervalUnit,
             RandomJitterMinutes, SkipWeekend, SkipHolidays, ExtraSkipDates.Trim());
+
+        /// <summary>
+        /// 首次运行参数签名（仅间隔方式有意义，其他方式恒为空串）。
+        ///
+        /// 单独拿出来比的原因：首次参数的生效路径和常规排期不同 —— 它要的是
+        /// "按新策略重新算首次执行"（走 <see cref="ComputeFirstRun"/>），而不是
+        /// 常规改排期的"从当前时刻重排"（走 <see cref="ComputeNext"/>）。
+        /// 漏比的话，编辑器里改了首次参数会被判定成"排期没变"，完全不生效（踩过）。
+        /// </summary>
+        public string FirstRunSignature() => Kind == TimeTriggerKind.Interval
+            ? string.Join("|", (int)FirstRunMode, FirstRunDelayValue, (int)FirstRunDelayUnit)
+            : "";
 
         /// <summary>
         /// 把"跳过周末 / 跳过节假日 / 额外跳过日期"应用到候选时间点上：

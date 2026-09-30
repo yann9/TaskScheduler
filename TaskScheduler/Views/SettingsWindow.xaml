@@ -157,6 +157,35 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ===== 电源 ===== -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="电源"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10"
+                                   Text="任务和系统睡眠怎么相处（只拦自动睡眠，不影响手动关机 / 睡眠）"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <CheckBox Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                                      Style="{StaticResource SettingCheck}"
+                                      Content="任务运行期间阻止系统休眠"
+                                      IsChecked="{Binding Settings.PreventSleepDuringTasks}"
+                                      ToolTip="从触发到动作执行完毕，系统保持唤醒（含「条件等待窗口」期间）。&#10;只拦空闲自动睡眠，不影响手动关机 / 睡眠。&#10;托盘右键菜单里的「阻止系统休眠」可以手动长期保持。"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingHint}"
+                                       Text="空闲时睡眠策略不变；所有任务都执行完才恢复原策略。也可以用托盘右键菜单「阻止系统休眠」手动保持（例如挂机下载）。"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
                 <!-- ===== 运行记录 ===== -->
                 <Border Style="{StaticResource Card}">
                     <StackPanel>

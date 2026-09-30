@@ -78,7 +78,9 @@ namespace TaskScheduler.ViewModels
             ToggleCommand = new RelayCommand(ToggleTask, () => SelectedTask != null);
             RunNowCommand = new RelayCommand(RunNow, () => SelectedTask != null);
             StartEngineCommand = new RelayCommand(StartLocalEngineGuarded, () => !_host.IsEngineRunning);
-            StopEngineCommand = new RelayCommand(() => Guard(_host.StopEngine, "停止引擎"), () => _host.IsEngineRunning);
+            StopEngineCommand = new RelayCommand(
+                () => { if (Guard(_host.StopEngine, "停止引擎")) UpdateEngineState(); },
+                () => _host.IsEngineRunning);
             ExitCommand = new RelayCommand(Exit);
             RefreshCommand = new RelayCommand(() => { Reload(); RefreshServiceState(); });
             // 四个服务命令的可用条件，对应的都是"点了会失败"或"点了没事干"的情形：
@@ -141,7 +143,7 @@ namespace TaskScheduler.ViewModels
         private void StartLocalEngineGuarded()
         {
             if (!App.ConfirmLocalEngineStart()) return;
-            Guard(_host.StartEngine, "启动引擎");
+            if (Guard(_host.StartEngine, "启动引擎")) UpdateEngineState();
         }
 
         /// <summary>
@@ -196,7 +198,11 @@ namespace TaskScheduler.ViewModels
 
         private void UpdateEngineState()
         {
-            EngineState = _host.IsEngineRunning ? "运行中" : "已停止";
+            var running = _host.IsEngineRunning;
+            EngineState = running ? "运行中" : "已停止";
+            // 托盘菜单的可用状态跟着一起刷：本方法由定时器每 2~3 秒驱动一次，
+            // 是引擎状态最及时的观测点（主窗口菜单靠 CommandManager 重算，托盘菜单只能主动推）。
+            try { App.Tray?.UpdateEngineMenu(running); } catch { }
             CommandManager.InvalidateRequerySuggested();
         }
 
@@ -404,8 +410,19 @@ namespace TaskScheduler.ViewModels
             copy.LastRunResult = "";
             copy.LastRunTime = null;
             copy.NextRunTime = null;
+
+            // 副本默认禁用（2026-09-30 周工拍板）：复制出来通常是为了改参数做变体，
+            // 改完之前就开跑 = 和原任务同排期双跑。改完在列表里点一次「启用」即可。
+            copy.Enabled = false;
             copy.RefreshView();
-            if (copy.Trigger is TimeTrigger tt) tt.NextRunTime = null;
+            if (copy.Trigger is TimeTrigger tt)
+            {
+                tt.NextRunTime = null;
+                // 必须复位 HasScheduled：克隆会把原任务"已排期过"的标记带过来，
+                // 引擎 Start() 时就会走 ComputeNext（当前时刻 + 间隔）而不是首次执行策略，
+                // 用户改的首次运行参数等于白改。
+                tt.HasScheduled = false;
+            }
 
             if (Guard(() => _host.SaveTask(copy), "复制任务"))
             {

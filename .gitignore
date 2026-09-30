@@ -34,3 +34,8 @@ Logs/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# ============================================================
+# WorkBuddy workspace data (memory notes, local self-test tools)
+# ============================================================
+.workbuddy/

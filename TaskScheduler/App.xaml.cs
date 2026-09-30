@@ -178,9 +178,34 @@ namespace TaskScheduler
                 }
             }
 
+            // 托盘启停回调与主窗口的「引擎」菜单走同一套语义：
+            //   启动前过双跑守卫（ConfirmLocalEngineStart）；失败要弹得出来，不能点了没反应；
+            //   成功后立即把菜单可用状态同步一遍 —— 主窗口的定时刷新要 2~3 秒后才轮到，
+            //   用户刚点完托盘就再右键，看到的必须是新状态。
             Tray = new TrayIconManager(
-                startEngine: () => { if (ConfirmLocalEngineStart()) host?.StartEngine(); },
-                stopEngine: () => host?.StopEngine(),
+                startEngine: () =>
+                {
+                    if (!ConfirmLocalEngineStart()) return;
+                    try { host?.StartEngine(); }
+                    catch (Exception ex)
+                    {
+                        Log.Error("托盘启动引擎失败：" + ex.Message);
+                        Views.TsDialog.Show("启动引擎失败：\n\n" + ex.Message,
+                            MainWindowTitle, Views.TsDialogButtons.Ok, Views.TsDialogIcon.Warning);
+                    }
+                    try { Tray?.UpdateEngineMenu(host != null && host.IsEngineRunning); } catch { }
+                },
+                stopEngine: () =>
+                {
+                    try { host?.StopEngine(); }
+                    catch (Exception ex)
+                    {
+                        Log.Error("托盘停止引擎失败：" + ex.Message);
+                        Views.TsDialog.Show("停止引擎失败：\n\n" + ex.Message,
+                            MainWindowTitle, Views.TsDialogButtons.Ok, Views.TsDialogIcon.Warning);
+                    }
+                    try { Tray?.UpdateEngineMenu(host != null && host.IsEngineRunning); } catch { }
+                },
                 exitApp: ExitApp);
             Log.Write("创建托盘图标…");
             Tray.Show();

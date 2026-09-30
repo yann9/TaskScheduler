@@ -262,6 +262,16 @@ namespace TaskScheduler.Engine
             };
             var output = new StringBuilder();
 
+            // 任务运行期间的休眠阻止（设置里可关）。持有范围覆盖"条件等待窗口 + 动作执行"
+            // 全程 —— 条件在等网络/电源的几十秒同样是"任务在跑"，睡了就会错过这个周期。
+            // 失败只记日志绝不打断任务：休眠阻止是锦上添花，不能变成任务跑不成的理由。
+            IDisposable sleepHold = null;
+            if (SettingsService.Current.PreventSleepDuringTasks)
+            {
+                try { sleepHold = SleepGuard.Acquire("任务执行[" + task.Name + "]"); }
+                catch (Exception ex) { Log.Error("启用休眠阻止失败：" + ex.Message); }
+            }
+
             try
             {
                 if (task.Action == null)
@@ -334,6 +344,7 @@ namespace TaskScheduler.Engine
                 }
                 finally
                 {
+                    try { sleepHold?.Dispose(); } catch { }
                     EndRun(task);
                 }
             }

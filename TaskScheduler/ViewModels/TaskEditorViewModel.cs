@@ -39,6 +39,9 @@ namespace TaskScheduler.ViewModels
         /// <summary>编辑器打开时任务原本的排期签名（见 ResetSchedule 的说明）</summary>
         private readonly string _scheduleSignatureAtOpen;
 
+        /// <summary>编辑器打开时任务原本的首次运行参数签名（见 ResetSchedule 的说明）</summary>
+        private readonly string _firstRunSignatureAtOpen;
+
         /// <summary>新建任务</summary>
         public TaskEditorViewModel() : this(null) { }
 
@@ -50,10 +53,16 @@ namespace TaskScheduler.ViewModels
             Task = existing ?? new AutomationTask
             {
                 Trigger = new TimeTrigger(),
-                Action = new RunProgramAction()
+                Action = new RunProgramAction(),
+                // 新任务默认禁用（2026-09-30 周工拍板）："保存"与"生效"分开 ——
+                // 配置完先落在列表里，点一次「启用」才参与调度，避免排期参数没核对
+                // 就开跑。编辑器顶部的「启用此任务」复选框就是这个初始状态，想保存
+                // 即跑可以当场勾上。
+                Enabled = false
             };
 
             _scheduleSignatureAtOpen = (Task.Trigger as TimeTrigger)?.ScheduleSignature() ?? "";
+            _firstRunSignatureAtOpen = (Task.Trigger as TimeTrigger)?.FirstRunSignature() ?? "";
 
             // 分区之间不直接互相依赖；唯一的中转是 Host（见 AdvancedSectionViewModel 的注释）。
             // TriggerSection 必须先建：AdvancedSection 会订阅它的属性变化。
@@ -95,15 +104,30 @@ namespace TaskScheduler.ViewModels
         }
 
         /// <summary>
-        /// 保存前调用：仅当排期参数真的改了，才丢弃存档里的"下次执行时间"让引擎重新排期。
-        /// 只改动作 / 条件 / 备注时必须保留原计划——否则间隔任务的计时锚点会被这次编辑
-        /// 重置成"编辑时刻 + 间隔"，用户看到的就是"每 4 小时的任务没在原来的点跑"。
-        /// 排期变了才重算；HasScheduled 不动，不会把已排期过的任务当成新任务再触发一次"首次执行"。
+        /// 保存前调用：排期或首次运行参数真的改了，才让引擎按新设置重新排期。
+        ///
+        /// 分两条路（签名分开比，见 <see cref="TimeTrigger.FirstRunSignature"/>）：
+        ///   1) 首次运行参数变了（仅间隔方式）→ 清掉下次执行时间**并把 HasScheduled 复位**，
+        ///      让引擎把任务当成"从未排期"重新走一次首次执行策略。只清 NextRunTime 是不够的：
+        ///      Start() 会因为 HasScheduled=true 走 ComputeNext（当前时刻 + 间隔），
+        ///      新的首次参数依然被忽略 —— 复制任务改首次参数不生效就是这条路漏了（踩过）。
+        ///   2) 常规排期变了 → 只清下次执行时间，从当前时刻按新参数重排；
+        ///      HasScheduled 保持不动，避免把已排期过的任务再触发一次"立即执行"。
+        ///      间隔任务的计时锚点会变成"编辑时刻"，这正是改间隔的用户预期的行为。
+        /// 只改动作 / 条件 / 备注时两个签名都不变，什么都不动 —— 原计划保留。
         /// </summary>
         public void ResetSchedule()
         {
             var tt = Task.Trigger as TimeTrigger;
             if (tt == null) return;
+
+            if (tt.FirstRunSignature() != _firstRunSignatureAtOpen)
+            {
+                tt.NextRunTime = null;
+                tt.HasScheduled = false;
+                return;
+            }
+
             if (tt.ScheduleSignature() == _scheduleSignatureAtOpen) return;
             tt.NextRunTime = null;
         }

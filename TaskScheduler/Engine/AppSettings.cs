@@ -63,6 +63,15 @@ namespace TaskScheduler.Engine
         // ===== 通知 =====
         [ObservableProperty] private bool _notifyOnTaskFailure = true;
 
+        // ===== 电源 =====
+        /// <summary>
+        /// 任务运行期间阻止系统休眠（2026-09-30 新增，默认开）。
+        /// 从触发（含条件等待窗口）到动作执行完毕，系统保持工作状态；
+        /// 只拦"空闲自动睡眠"，不影响用户手动关机 / 睡眠。
+        /// 另有托盘菜单「阻止系统休眠」做无限期手动保持，与这里共用引用计数。
+        /// </summary>
+        [ObservableProperty] private bool _preventSleepDuringTasks = true;
+
         // ===== 界面 =====
         [ObservableProperty] private bool _confirmOnDelete = true;
         [ObservableProperty] private int _taskListFontSize = 12;
@@ -99,6 +108,7 @@ namespace TaskScheduler.Engine
             LogTailLines = LogTailLines,
             MaxLogFileMB = MaxLogFileMB,
             NotifyOnTaskFailure = NotifyOnTaskFailure,
+            PreventSleepDuringTasks = PreventSleepDuringTasks,
             ConfirmOnDelete = ConfirmOnDelete,
             TaskListFontSize = TaskListFontSize
         };
@@ -117,6 +127,7 @@ namespace TaskScheduler.Engine
             LogTailLines = other.LogTailLines;
             MaxLogFileMB = other.MaxLogFileMB;
             NotifyOnTaskFailure = other.NotifyOnTaskFailure;
+            PreventSleepDuringTasks = other.PreventSleepDuringTasks;
             ConfirmOnDelete = other.ConfirmOnDelete;
             TaskListFontSize = other.TaskListFontSize;
         }
