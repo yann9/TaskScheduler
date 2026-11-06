@@ -31,7 +31,7 @@
 ; ---- 其它常量 ----
 !define TS_APP_NAME  "自动化任务调度器"
 !define TS_EXE_NAME  "TaskScheduler.exe"
-!define TS_VERSION   "1.0.0"
+!define TS_VERSION   "1.4.1"
 !define TS_DIR_NAME  "TaskScheduler"
 ; 本程序的卸载键（写入卸载信息用）
 !define UninstallKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\TaskScheduler"
