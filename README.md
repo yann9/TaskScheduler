@@ -84,10 +84,12 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → Secrets →
 **没配令牌就整步跳过**，GitHub 发布照常，客户端自动回退；配了令牌却推不上去会让这次
 run 变红（早期版本用 `continue-on-error` 把失败包成绿勾，容易漏看）。
 
-认证走 Gitee 官方支持的 `https://<登录名>:<私人令牌>@gitee.com/...` 凭据 URL，
-并额外带一个全局 `http.extraHeader` 兜底：URL 限定版的 `http.https://gitee.com/.extraheader`
-在 `git push` 时不会生效（公开仓库 clone 免登录，会把这个问题掩盖到 push 才暴露）。
-所有 git 输出都做了脱敏，令牌及其 URL 转义 / Base64 形式都不会写进日志。
+认证走 Gitee 官方支持的 `https://<登录名>:<私人令牌>@gitee.com/...` 单一凭据 URL。
+两个已踩过的坑：URL 限定版的 `http.https://gitee.com/.extraheader` 在 `git push` 时不会生效
+（公开仓库 clone 免登录，会把问题掩盖到 push 才暴露）；而同时叠加全局 `http.extraHeader`
+与 URL 凭据会发出重复的 `Authorization` 头，Gitee 直接回 `Unauthorized`。
+令牌自检会用 `/api/v5/user` 确认令牌有效性并取真实登录名，用 `/api/v5/repos/...` 确认 push 权限，
+诊断结果会打印在 CI 日志里。所有 git 输出都做了脱敏，令牌及其 URL 转义形式都不会写进日志。
 
 **为什么不用 Gitee 的 `releases/latest`**：仓库是多项目共用的，latest 会指向别的项目
 最新发的那个 Release，tag 也会跨项目撞名。固定清单按目录隔离、内容完全由 CI 控制，

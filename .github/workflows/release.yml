@@ -289,16 +289,47 @@ jobs:
           }
           $json = $manifest | ConvertTo-Json -Depth 5
 
-          # 认证：Gitee 的 git-over-HTTPS 只认 URL 内嵌的「登录名:私人令牌」，
-          # 之前用 http.https://gitee.com/.extraheader 注入 Basic 头在 push 时没生效
-          # （clone 是公开仓库免登录，掩盖了这一点），服务器 401 后 CI 又不能交互输入，
-          # 于是报 "could not read Username for 'https://gitee.com'"。
-          # 现在主用凭据 URL，同时保留一个「全局」http.extraHeader 兜底（URL 限定版不生效）。
+          # 认证：Gitee 的 git-over-HTTPS 只认 URL 内嵌的「登录名:私人令牌」。踩过的两个坑：
+          #  1) http.https://gitee.com/.extraheader（URL 限定版）在 push 时不生效；
+          #     clone 是公开仓库免登录，会把问题掩盖到 push 才暴露为「读不到用户名」。
+          #  2) 同时叠加全局 http.extraHeader 与 URL 凭据会发出重复的 Authorization 头，
+          #     Gitee 直接回 Unauthorized。因此只用单一凭据 URL，不再叠加任何 header。
           $owner = $repo.Split('/')[0]
-          $user = if ($env:GITEE_USER) { $env:GITEE_USER.Trim() } else { $owner }
           $token = $env:GITEE_TOKEN.Trim()
-          $basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("$user`:$token"))
-          $cfgHeader = "http.extraHeader=AUTHORIZATION: basic $basic"
+          $user = if ($env:GITEE_USER) { $env:GITEE_USER.Trim() } else { $owner }
+          $escToken = [uri]::EscapeDataString($token)
+          Write-Host "GITEE_TOKEN length: $($token.Length) (value is never logged)"
+
+          # 令牌自检：Gitee 对 git-over-HTTPS 的 401 只回一句 Unauthorized，
+          # 先用 API 问清「令牌是否有效 / 真实登录名 / 对仓库有无 push 权限」，别盲目重试。
+          # 注意：异常信息里可能带 access_token，catch 里绝不打印 Message，只取状态码。
+          $diag = @()
+          try {
+            $me = Invoke-RestMethod -Uri "https://gitee.com/api/v5/user?access_token=$escToken" `
+                    -Headers @{ 'User-Agent' = 'TaskScheduler-CI' } -TimeoutSec 20 -ErrorAction Stop
+            if ($me.login) {
+              Write-Host "GITEE_TOKEN valid; account login = $($me.login)"
+              if (-not $env:GITEE_USER) { $user = [string]$me.login }
+            }
+          } catch {
+            $c = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+            $diag += "/user API HTTP $c（令牌无效/过期，或未勾选 user_info 权限）"
+            Write-Warning "GITEE_TOKEN rejected by Gitee /user API (HTTP $c)"
+          }
+          try {
+            $info = Invoke-RestMethod -Uri "https://gitee.com/api/v5/repos/$repo?access_token=$escToken" `
+                    -Headers @{ 'User-Agent' = 'TaskScheduler-CI' } -TimeoutSec 20 -ErrorAction Stop
+            $perm = $info.permission | ConvertTo-Json -Compress
+            Write-Host "repo permission: $perm"
+            if ($info.permission -and $info.permission.push -eq $false) {
+              $diag += "令牌对 $repo 没有 push 权限（需 projects 权限，或仓库成员权限不足）"
+            }
+          } catch {
+            $c = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+            $diag += "repo API HTTP $c"
+          }
+          Write-Host "git HTTPS user = $user"
+
           # 清掉 runner 注入的 credential helper（它只对 github.com 有意义），
           # 并彻底关闭交互提示，避免 GCM 在无人值守环境里尝试弹窗。
           $cfgNoCred = 'credential.helper='
@@ -306,8 +337,8 @@ jobs:
           $env:GCM_INTERACTIVE = 'Never'
           $credUrl = "https://$([uri]::EscapeDataString($user)):$([uri]::EscapeDataString($token))@gitee.com/$repo.git"
 
-          # 所有 git 输出统一脱敏：令牌、URL 转义后的令牌、Base64 凭据都不进日志
-          # （GitHub 只会 mask secret 原文，转义/编码后的形式它认不出来）。
+          # 所有 git 输出统一脱敏：令牌及 URL 转义后的形式都不进日志
+          # （GitHub 只会 mask secret 原文，转义后的形式它认不出来）。
           function Invoke-Git {
             param([string[]]$GitArgs)
             # 原生命令的 stderr 不能因为外层 ErrorActionPreference=Stop 变成终止错误。
@@ -318,7 +349,6 @@ jobs:
               $safe = [string]$line
               $safe = $safe.Replace($token, '***')
               $safe = $safe.Replace([uri]::EscapeDataString($token), '***')
-              $safe = $safe.Replace($basic, '***')
               Write-Host $safe
             }
             return $code
@@ -327,7 +357,7 @@ jobs:
           $work = Join-Path $env:RUNNER_TEMP 'gitee-dist-sync'
           if (Test-Path $work) { Remove-Item $work -Recurse -Force }
           Write-Host "Cloning https://gitee.com/$repo (master) ..."
-          if ((Invoke-Git @('-c', $cfgHeader, '-c', $cfgNoCred, 'clone', '--depth', '1', '--branch', 'master', $credUrl, $work)) -ne 0) {
+          if ((Invoke-Git @('-c', $cfgNoCred, 'clone', '--depth', '1', '--branch', 'master', $credUrl, $work)) -ne 0) {
             throw 'git clone failed (check GITEE_TOKEN permissions: 私人令牌需要 projects 写权限)'
           }
 
@@ -349,9 +379,12 @@ jobs:
             $diffCode = Invoke-Git @('diff', '--cached', '--quiet')
             if ($diffCode -ne 0) {
               if ((Invoke-Git @('commit', '-m', "chore: publish TaskScheduler v$v")) -ne 0) { throw 'git commit failed' }
-              # origin 已经是带凭据的 URL，再叠加 header 与禁用 helper 兜底。
-              if ((Invoke-Git @('-c', $cfgHeader, '-c', $cfgNoCred, 'push', 'origin', 'HEAD:master')) -ne 0) {
-                throw 'git push failed (check GITEE_TOKEN / GITEE_DIST_USER permissions)'
+              # origin 已经是带凭据的 URL，只需禁用 helper 避免 runner 的 GCM 插手。
+              if ((Invoke-Git @('-c', $cfgNoCred, 'push', 'origin', 'HEAD:master')) -ne 0) {
+                $hint = if ($diag.Count) { ' 诊断: ' + ($diag -join '; ') } else {
+                  ' 诊断: 令牌有效但 push 被拒，请检查 master 是否为保护分支、令牌是否勾选 projects 权限、登录名是否为 Gitee 账号名。'
+                }
+                throw "git push failed.$hint"
               }
               Write-Host "Synced to https://gitee.com/$repo/tree/master/$dir"
             } else {
