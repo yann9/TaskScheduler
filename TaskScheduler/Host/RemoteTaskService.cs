@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using TaskScheduler.Engine;
@@ -40,6 +41,10 @@ namespace TaskScheduler
         public void SaveTask(AutomationTask task) => SendOrThrow(IpcCommand.SaveTask, task);
 
         public void DeleteTask(AutomationTask task) => SendOrThrow(IpcCommand.DeleteTask, task);
+
+        public void ReplaceAllTasks(IReadOnlyList<AutomationTask> tasks)
+            => SendOrThrow(IpcCommand.ReplaceAllTasks,
+                           tasks == null ? new List<AutomationTask>() : tasks.ToList());
 
         public Task RunNowAsync(AutomationTask task)
         {

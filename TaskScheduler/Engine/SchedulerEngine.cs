@@ -90,6 +90,36 @@ namespace TaskScheduler.Engine
             Save();
         }
 
+        /// <summary>
+        /// 整体替换任务库（任务导入的「覆盖全部」）。
+        ///
+        /// 为什么不复用「删一个 + 加一个」：那样每删一条就落一次盘，中途失败会留下半套任务；
+        /// 更糟的是旧触发器在这段时间里还活着，可能对着一个即将被替换掉的任务触发动作。
+        /// 这里在锁内一次性停旧、换列表、启新，出锁后只 Save 一次，服务端与本地宿主走的是同一条路径。
+        ///
+        /// 注：导入前的备份由界面层完成（它要把备份路径显示给用户），引擎不重复备份。
+        /// </summary>
+        public void ReplaceAll(IEnumerable<AutomationTask> tasks)
+        {
+            var incoming = (tasks ?? Enumerable.Empty<AutomationTask>())
+                .Where(t => t != null).ToList();
+
+            lock (_lock)
+            {
+                foreach (var t in _tasks) StopTask(t);
+                _tasks.Clear();
+                _tasks.AddRange(incoming);
+                if (_running)
+                {
+                    foreach (var t in _tasks.Where(x => x.Enabled && x.Trigger != null))
+                        StartTask(t);
+                }
+            }
+
+            Save();
+            RaiseRun($"已导入 {incoming.Count} 个任务（覆盖全部）");
+        }
+
         public void Start()
         {
             if (_running) return;

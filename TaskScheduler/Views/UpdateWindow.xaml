@@ -1,0 +1,112 @@
+﻿<Window x:Class="TaskScheduler.Views.UpdateWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="检查更新" Height="520" Width="620" MinWidth="520" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        FontFamily="Microsoft YaHei UI" FontSize="12">
+    <DockPanel>
+        <!-- 底部按钮条：与关于 / 设置窗口同一套灰 chrome -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource ChromeBgBrush}"
+                BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="0,1,0,0"
+                Padding="14,10">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="重新检查" Width="88" Margin="0,0,8,0"
+                        Command="{Binding CheckCommand}"/>
+                <Button Content="打开下载页" Width="96" Margin="0,0,8,0"
+                        Command="{Binding OpenPageCommand}"
+                        Visibility="{Binding HasUpdate, Converter={StaticResource BoolVis}}"/>
+                <Button Content="跳过此版本" Width="96" Margin="0,0,8,0"
+                        Command="{Binding SkipCommand}"
+                        Visibility="{Binding HasUpdate, Converter={StaticResource BoolVis}}"
+                        ToolTip="不再提示这个版本；下次发布新版本时仍会提醒。"/>
+                <Button Content="下载并安装" Width="108" Margin="0,0,8,0"
+                        Style="{StaticResource AccentButton}"
+                        Command="{Binding InstallCommand}"
+                        Visibility="{Binding HasUpdate, Converter={StaticResource BoolVis}}"
+                        ToolTip="下载 NSIS 安装包并启动安装；程序会先优雅退出以释放文件占用。"/>
+                <Button Content="关闭" Width="80" IsCancel="True"
+                        Command="{Binding CloseCommand}"/>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="22,20,22,14"
+                      Background="{StaticResource PageBgBrush}">
+            <StackPanel>
+                <TextBlock Text="检查更新" FontSize="19" FontWeight="SemiBold" Foreground="#1F2937"/>
+                <TextBlock Text="{Binding StatusText}" Margin="0,8,0,14" FontSize="13"
+                           Foreground="#374151" TextWrapping="Wrap"/>
+
+                <!-- 版本对比 -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="版本信息"/>
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}"
+                                       Text="当前版本" Margin="0,3,14,3"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding CurrentVersion}"
+                                       VerticalAlignment="Center"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}"
+                                       Text="最新版本" Margin="0,3,14,3"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding NewVersion}"
+                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                       Foreground="#0B6BCB"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}"
+                                       Text="发布时间" Margin="0,3,14,3"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PublishedText}"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- 下载进度（只在下载时出现） -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,12"
+                        Visibility="{Binding IsDownloading, Converter={StaticResource BoolVis}}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="正在下载安装包" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="{Binding ProgressText}"
+                                       Foreground="#5B6573" HorizontalAlignment="Right"/>
+                        </Grid>
+                        <ProgressBar Height="8" Margin="0,8,0,0" Minimum="0" Maximum="100"
+                                     Value="{Binding DownloadProgress}"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                   Text="下载完成后会自动启动安装程序，本程序将先退出以释放文件占用。任务配置与运行记录不会丢失。"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 发布说明 / 失败原因 -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="更新说明"/>
+                        <TextBlock Text="{Binding ReleaseTitle}" Margin="0,8,0,6"
+                                   FontWeight="SemiBold" TextWrapping="Wrap"
+                                   Visibility="{Binding HasUpdate, Converter={StaticResource BoolVis}}"/>
+                        <TextBlock Text="{Binding ReleaseNotes}" Style="{StaticResource Hint}"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="{Binding SourceText}" Foreground="{StaticResource MetaFgBrush}"
+                           TextWrapping="Wrap" Margin="2,2,0,0"/>
+                <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="2,8,0,0"
+                           Text="提示：检查来源与自动检查开关可在「设置 → 更新」里调整；留空地址时默认读取 GitHub Releases 的最新发布。"/>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

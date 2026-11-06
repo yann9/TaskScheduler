@@ -34,7 +34,9 @@ namespace TaskScheduler.ViewModels.Sections
                 var parts = new System.Collections.Generic.List<string>();
                 if (Task.Trigger is TimeTrigger tt)
                 {
-                    if (tt.RandomJitterMinutes > 0) parts.Add("抖动 " + tt.RandomJitterMinutes + " 分钟");
+                    // 「时间段内随机」不叠加抖动（见 TimeTrigger.Schedule），摘要里也别显示这条
+                    if (tt.RandomJitterMinutes > 0 && tt.Kind != TimeTriggerKind.RandomWindow)
+                        parts.Add("抖动 " + tt.RandomJitterMinutes + " 分钟");
                     if (tt.SkipWeekend) parts.Add("跳过周末");
                     if (tt.SkipHolidays) parts.Add("跳过节假日");
                     if (!string.IsNullOrWhiteSpace(tt.ExtraSkipDates)) parts.Add("额外跳过日期");
@@ -48,6 +50,16 @@ namespace TaskScheduler.ViewModels.Sections
 
         /// <summary>抖动与跳过规则是否适用（只对时间触发器有意义）</summary>
         public bool IsTimeTrigger => Task.Trigger is TimeTrigger;
+
+        /// <summary>
+        /// 是否显示「随机抖动」卡片。
+        /// 「时间段内随机」算出的下次执行时间本身就是窗口内抽出的随机点，
+        /// 再叠加抖动会把实际唤醒时刻推到用户设定的时间段之外（Schedule 里也特意跳过了抖动），
+        /// 所以该方式下把这组设置隐藏，避免「配了却不生效」的困惑。
+        /// 与 ShowSkipRules 一样依赖触发器分区的 TriggerKind，变化时在 OnTriggerSectionChanged 里刷新。
+        /// </summary>
+        public bool ShowRandomJitter
+            => IsTimeTrigger && Host.TriggerSection.TriggerKind != TimeTriggerKind.RandomWindow;
 
         /// <summary>
         /// 是否显示"跳过周末 / 节假日"这组设置。
@@ -93,6 +105,7 @@ namespace TaskScheduler.ViewModels.Sections
             OnPropertyChanged(nameof(IsTimeTrigger));
             OnPropertyChanged(nameof(TimeTriggerObj));
             OnPropertyChanged(nameof(ShowSkipRules));
+            OnPropertyChanged(nameof(ShowRandomJitter));
         }
 
         public override void Refresh()
@@ -109,6 +122,7 @@ namespace TaskScheduler.ViewModels.Sections
                 OnPropertyChanged(nameof(ShowSkipRules));
                 OnPropertyChanged(nameof(IsTimeTrigger));
                 OnPropertyChanged(nameof(TimeTriggerObj));
+                OnPropertyChanged(nameof(ShowRandomJitter));
             }
         }
 

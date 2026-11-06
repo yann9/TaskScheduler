@@ -148,6 +148,13 @@
                 <MenuItem Header="新建任务" Command="{Binding NewCommand}" InputGestureText="Ctrl+N"/>
                 <MenuItem Header="刷新列表" Command="{Binding RefreshCommand}" InputGestureText="F5"/>
                 <Separator Style="{StaticResource TsMenuSeparator}"/>
+                <MenuItem Header="导入任务…" Command="{Binding ImportTasksCommand}"
+                          ToolTip="从 .json 文件导入任务。可选择合并追加或覆盖全部，导入的任务默认停用。"/>
+                <MenuItem Header="导出全部任务…" Command="{Binding ExportTasksCommand}"
+                          ToolTip="把所有任务的配置导出成 .json 文件（不含运行记录与本机排期）。"/>
+                <MenuItem Header="导出选中任务…" Command="{Binding ExportSelectedTasksCommand}"
+                          ToolTip="只导出列表里当前选中的那一个任务。"/>
+                <Separator Style="{StaticResource TsMenuSeparator}"/>
                 <MenuItem Header="退出" Command="{Binding ExitCommand}"/>
             </MenuItem>
 
@@ -197,6 +204,9 @@
             </MenuItem>
 
             <MenuItem Header="帮助(_H)">
+                <MenuItem Header="检查更新…" Command="{Binding CheckUpdateCommand}"
+                          ToolTip="检查 GitHub Releases（或设置里自定义的地址）有没有新版本，可一键下载安装。"/>
+                <Separator Style="{StaticResource TsMenuSeparator}"/>
                 <MenuItem Header="关于…" Command="{Binding OpenAboutCommand}"/>
             </MenuItem>
         </Menu>

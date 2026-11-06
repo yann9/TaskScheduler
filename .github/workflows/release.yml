@@ -199,6 +199,27 @@ jobs:
           Set-Content -Path release_notes.md -Value $sb.ToString() -Encoding utf8
           Write-Host "Release notes generated: feat=$($feat.Count) fix=$($fix.Count) other=$($other.Count)"
 
+      # 机器可读的版本清单：除了 GitHub API，客户端也支持直接读这份 JSON。
+      # 国内用户可把 update.json（以及 setup.exe）同步到 Gitee / 自建站点 / 对象存储，
+      # 然后在「设置 → 更新 → 版本清单地址」里填那个国内地址，彻底绕开 GitHub。
+      - name: Generate update manifest
+        shell: pwsh
+        run: |
+          $v = '${{ steps.ver.outputs.version }}'.Trim()
+          $repo = '${{ github.repository }}'
+          $notes = if (Test-Path release_notes.md) { Get-Content release_notes.md -Raw -Encoding utf8 } else { '' }
+          $manifest = [ordered]@{
+            version     = $v
+            title       = "v$v"
+            notes       = $notes
+            url         = "https://github.com/$repo/releases/download/v$v/TaskScheduler-$v-setup.exe"
+            pageUrl     = "https://github.com/$repo/releases/tag/v$v"
+            fileName    = "TaskScheduler-$v-setup.exe"
+            publishedAt = (Get-Date).ToUniversalTime().ToString('o')
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content update.json -Encoding utf8
+          Write-Host "update.json generated for v$v"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -214,5 +235,91 @@ jobs:
           files: |
             TaskScheduler-${{ steps.ver.outputs.version }}-setup.exe
             TaskScheduler-${{ steps.ver.outputs.version }}-portable.zip
+            update.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 把产物同步到 Gitee 制品仓库。该仓库是「所有项目共用」的 dist 库，按项目分目录：
+      # 这里只读写 TaskScheduler/ 子目录，其它项目的文件一个都不碰。
+      # 客户端默认读固定地址 <repo>/raw/master/TaskScheduler/update.json，
+      # 因此不用仓库级 releases/latest（那会串到别的项目最新发的 Release）。
+      #
+      # 需要在 GitHub 仓库 Settings → Secrets and variables → Actions 里配置
+      # GITEE_TOKEN（Gitee 私人令牌，projects 写权限）。没配就整步跳过，
+      # GitHub Release 照常发布，客户端会自动回退到 GitHub + 加速节点。
+      # 可用仓库变量 GITEE_DIST_REPO / GITEE_DIST_DIR 覆盖默认仓库与子目录。
+      - name: Sync artifacts to Gitee dist repo
+        shell: pwsh
+        continue-on-error: true
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPO: ${{ vars.GITEE_DIST_REPO || 'yann9/dist' }}
+          GITEE_DIR: ${{ vars.GITEE_DIST_DIR || 'TaskScheduler' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:GITEE_TOKEN) {
+            Write-Host 'GITEE_TOKEN not configured - skipping Gitee sync (GitHub release is unaffected).'
+            exit 0
+          }
+
+          $repo = $env:GITEE_REPO
+          $dir = $env:GITEE_DIR
+          $v = '${{ steps.ver.outputs.version }}'.Trim()
+          $root = (Get-Location).Path
+          $ghRepo = '${{ github.repository }}'
+          $setup = "TaskScheduler-$v-setup.exe"
+          $portable = "TaskScheduler-$v-portable.zip"
+
+          # 主地址走 Gitee raw（国内直连），备用地址指向 GitHub Release。
+          # Gitee raw 对较大的 .exe 可能返回 403，客户端遇到失败会自动换用备用地址，
+          # 并自动套上加速节点，升级链路不会因此断掉。
+          $notes = if (Test-Path release_notes.md) { Get-Content release_notes.md -Raw -Encoding utf8 } else { '' }
+          $manifest = [ordered]@{
+            version     = $v
+            title       = "v$v"
+            notes       = $notes
+            url         = "https://gitee.com/$repo/raw/master/$dir/TaskScheduler-setup.exe"
+            fallbackUrl = "https://github.com/$ghRepo/releases/download/v$v/$setup"
+            pageUrl     = "https://gitee.com/$repo/tree/master/$dir"
+            fileName    = $setup
+            publishedAt = (Get-Date).ToUniversalTime().ToString('o')
+          }
+          $json = $manifest | ConvertTo-Json -Depth 5
+
+          # 令牌经 http.extraheader 注入：不拼进 remote URL，日志里也不会出现。
+          $owner = $repo.Split('/')[0]
+          $basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("$owner`:$($env:GITEE_TOKEN)"))
+          $gitCfg = "http.https://gitee.com/.extraheader=AUTHORIZATION: basic $basic"
+
+          $work = Join-Path $env:RUNNER_TEMP 'gitee-dist-sync'
+          if (Test-Path $work) { Remove-Item $work -Recurse -Force }
+          git -c $gitCfg clone --depth 1 --branch master "https://gitee.com/$repo.git" $work
+          if ($LASTEXITCODE -ne 0) { throw 'git clone failed' }
+
+          Push-Location $work
+          try {
+            git config user.name 'github-actions[bot]'
+            git config user.email 'github-actions[bot]@users.noreply.github.com'
+            # 制品仓库可能仍是空白 master（连一个 commit 都没有），显式把 HEAD 指过去。
+            git symbolic-ref HEAD refs/heads/master
+
+            $target = Join-Path (Get-Location).Path $dir
+            New-Item -ItemType Directory -Path $target -Force | Out-Null
+            Set-Content -Path (Join-Path $target 'update.json') -Value $json -Encoding utf8
+            Copy-Item (Join-Path $root $setup) (Join-Path $target 'TaskScheduler-setup.exe') -Force
+            Copy-Item (Join-Path $root $portable) (Join-Path $target 'TaskScheduler-portable.zip') -Force
+
+            # 只暂存本项目目录：共用仓库里其它项目的文件不受影响。
+            git add -- "$dir"
+            git diff --cached --quiet
+            if ($LASTEXITCODE -ne 0) {
+              git commit -m "chore: publish TaskScheduler v$v"
+              git -c $gitCfg push origin HEAD:master
+              if ($LASTEXITCODE -ne 0) { throw 'git push failed' }
+              Write-Host "Synced to https://gitee.com/$repo/tree/master/$dir"
+            } else {
+              Write-Host 'No changes - Gitee artifacts are already up to date.'
+            }
+          } finally {
+            Pop-Location
+          }

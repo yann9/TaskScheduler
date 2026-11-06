@@ -16,6 +16,14 @@ namespace TaskScheduler
         IReadOnlyList<AutomationTask> ListTasks();
         void SaveTask(AutomationTask task);
         void DeleteTask(AutomationTask task);
+
+        /// <summary>
+        /// 用给定列表整体替换任务库（任务导入的「覆盖全部」）。
+        /// 必须在持有引擎的那一侧一次性完成：服务模式下若循环调 SaveTask，
+        /// 会逐条落盘、中途失败留下半套数据，还可能让引擎在替换过程中按旧排期触发。
+        /// </summary>
+        void ReplaceAllTasks(IReadOnlyList<AutomationTask> tasks);
+
         Task RunNowAsync(AutomationTask task);
 
         string GetLogs();

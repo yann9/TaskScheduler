@@ -26,6 +26,7 @@ namespace TaskScheduler.Converters
                     TimeTriggerKind.Weekly => "每周",
                     TimeTriggerKind.Interval => "间隔循环",
                     TimeTriggerKind.Monthly => "每月",
+                    TimeTriggerKind.RandomWindow => "时间段内随机",
                     _ => k.ToString()
                 },
                 MonthlyMode mm => mm switch

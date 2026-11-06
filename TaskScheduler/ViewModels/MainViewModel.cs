@@ -11,6 +11,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TaskScheduler.Engine;
+using TaskScheduler.Persistence;
 using TaskScheduler.Service;
 using TaskScheduler.Triggers;
 using TaskScheduler.Views;
@@ -66,6 +67,12 @@ namespace TaskScheduler.ViewModels
         public ICommand ViewSelectedTaskHistoryCommand { get; }
         public ICommand OpenAboutCommand { get; }
 
+        // ===== 导入导出 / 检测更新 =====
+        public ICommand ImportTasksCommand { get; }
+        public ICommand ExportTasksCommand { get; }
+        public ICommand ExportSelectedTasksCommand { get; }
+        public ICommand CheckUpdateCommand { get; }
+
         public MainViewModel(ITaskService host, bool serviceMode)
         {
             _host = host;
@@ -110,6 +117,11 @@ namespace TaskScheduler.ViewModels
                 () => OpenRunHistory(SelectedTask?.Id), () => SelectedTask != null);
             OpenAboutCommand = new RelayCommand(OpenAbout);
 
+            ImportTasksCommand = new RelayCommand(ImportTasks);
+            ExportTasksCommand = new RelayCommand(() => ExportTasks(false));
+            ExportSelectedTasksCommand = new RelayCommand(() => ExportTasks(true), () => SelectedTask != null);
+            CheckUpdateCommand = new RelayCommand(CheckUpdate);
+
             Reload();
             RefreshServiceState();
             ApplySettings();
@@ -132,6 +144,9 @@ namespace TaskScheduler.ViewModels
             };
             _timer.Start();
             RefreshLastEvent();
+
+            // 启动时自动检查更新：后台跑、延迟几秒避开启动高峰，失败静默，只有发现新版本才弹窗
+            _ = AutoCheckUpdateAsync();
         }
 
         /// <summary>
@@ -481,6 +496,183 @@ namespace TaskScheduler.ViewModels
                 DataContext = vm
             };
             return editor.ShowDialog() == true;
+        }
+
+        // ================= 任务导入导出 =================
+
+        /// <summary>导出全部或当前选中的任务。写盘走 TaskTransfer（带格式版本号 + 原子写）</summary>
+        private void ExportTasks(bool onlySelected)
+        {
+            List<AutomationTask> list;
+            if (onlySelected)
+            {
+                if (SelectedTask == null) return;
+                list = new List<AutomationTask> { SelectedTask };
+            }
+            else
+            {
+                try { list = _host.ListTasks().ToList(); }
+                catch (Exception ex)
+                {
+                    TsDialog.Show("读取任务列表失败：\n\n" + ex.Message, "导出任务",
+                        TsDialogButtons.Ok, TsDialogIcon.Warning);
+                    return;
+                }
+            }
+
+            if (list.Count == 0)
+            {
+                TsDialog.Show("当前没有可导出的任务。", "导出任务",
+                    TsDialogButtons.Ok, TsDialogIcon.Info);
+                return;
+            }
+
+            var path = Pickers.SaveJson("TaskScheduler-tasks-" + DateTime.Now.ToString("yyyyMMdd-HHmm") + ".json");
+            if (string.IsNullOrWhiteSpace(path)) return;
+
+            try
+            {
+                var n = TaskTransfer.Export(list, path);
+                TsDialog.Show(
+                    $"已导出 {n} 个任务到：\n\n{path}\n\n" +
+                    "文件含触发器 / 条件 / 动作配置，不含运行记录与本机排期。" +
+                    "导入时任务默认停用，确认无误后手动启用即可。",
+                    "导出任务", TsDialogButtons.Ok, TsDialogIcon.Info);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("导出任务失败：" + ex.Message);
+                TsDialog.Show("导出任务失败：\n\n" + ex.Message, "导出任务",
+                    TsDialogButtons.Ok, TsDialogIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// 导入任务：先解析校验 → 让用户选合并 / 覆盖 → 覆盖前备份 → 一次性写入。
+        /// 反序列化一律走 TaskTransfer（内部用 JsonSafety.Persistent 白名单绑定器），
+        /// 绝不把外部 JSON 直接喂给裸 JsonConvert。
+        /// </summary>
+        private void ImportTasks()
+        {
+            var path = Pickers.OpenJson();
+            if (string.IsNullOrWhiteSpace(path)) return;
+
+            TaskImportResult result;
+            try { result = TaskTransfer.Read(path); }
+            catch (Exception ex)
+            {
+                Log.Error("导入任务失败：" + ex.Message);
+                TsDialog.Show("无法导入这个文件：\n\n" + ex.Message, "导入任务",
+                    TsDialogButtons.Ok, TsDialogIcon.Warning);
+                return;
+            }
+
+            if (result.Tasks.Count == 0)
+            {
+                TsDialog.Show(
+                    "文件里没有可导入的任务。\n\n" +
+                    (string.IsNullOrWhiteSpace(result.Warning) ? "请确认选择的是由「导出任务」生成的文件。" : result.Warning),
+                    "导入任务", TsDialogButtons.Ok, TsDialogIcon.Warning);
+                return;
+            }
+
+            var opt = new Views.ImportOptionsWindow(result, path)
+            {
+                Owner = System.Windows.Application.Current.MainWindow
+            };
+            if (opt.ShowDialog() != true) return;
+
+            string backup = null;
+            if (opt.ReplaceAll)
+            {
+                try { backup = TaskTransfer.BackupTasksFile(); }
+                catch (Exception ex)
+                {
+                    var go = TsDialog.Show(
+                        "覆盖前备份当前任务库失败：\n\n" + ex.Message +
+                        "\n\n仍要继续覆盖吗？（建议先手动复制一份 tasks.json）",
+                        "导入任务", TsDialogButtons.YesNo, TsDialogIcon.Warning);
+                    if (go != System.Windows.MessageBoxResult.Yes) return;
+                }
+            }
+
+            // 合并：逐条保存（失败会抛，前面的任务已经落盘，但绝不会动到现有任务）。
+            // 覆盖：一次 IPC 往返在持有引擎的一侧整体替换，避免逐条落盘留下半套数据。
+            var ok = opt.ReplaceAll
+                ? Guard(() => _host.ReplaceAllTasks(result.Tasks), "导入任务（覆盖）")
+                : Guard(() => { foreach (var t in result.Tasks) _host.SaveTask(t); }, "导入任务（合并）");
+
+            if (!ok)
+            {
+                if (backup != null)
+                    TsDialog.Show("导入没有完成。覆盖前的任务库已备份在：\n\n" + backup,
+                        "导入任务", TsDialogButtons.Ok, TsDialogIcon.Info);
+                return;
+            }
+
+            Reload(force: true);
+
+            var msg = $"已导入 {result.Tasks.Count} 个任务（默认停用，确认无误后请在列表里逐个启用）。";
+            if (result.Skipped > 0) msg += $"\n\n跳过 {result.Skipped} 个配置不完整的条目。";
+            if (!string.IsNullOrWhiteSpace(result.Warning)) msg += "\n\n" + result.Warning;
+            if (backup != null) msg += "\n\n覆盖前的任务库已备份到：\n" + backup;
+            TsDialog.Show(msg, "导入任务", TsDialogButtons.Ok, TsDialogIcon.Info);
+        }
+
+        // ================= 检测更新 =================
+
+        private void CheckUpdate()
+        {
+            var win = new Views.UpdateWindow
+            {
+                Owner = System.Windows.Application.Current.MainWindow
+            };
+            win.ShowDialog();
+        }
+
+        /// <summary>
+        /// 启动后自动检查：每天最多一次，延迟 8 秒避开启动高峰；
+        /// 失败（没网 / 清单不可达）只记日志，绝不弹窗打断用户；
+        /// 只有真的有新版本、且不是用户跳过的那个版本，才把结果窗口推到前台。
+        /// </summary>
+        private async Task AutoCheckUpdateAsync()
+        {
+            try
+            {
+                var settings = SettingsService.Current;
+                if (!settings.AutoCheckUpdate) return;
+
+                var today = DateTime.Now.ToString("yyyy-MM-dd");
+                if (settings.LastUpdateCheckDate == today) return;
+
+                await Task.Delay(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+
+                var r = await UpdateService.CheckAsync().ConfigureAwait(false);
+
+                // 检查过就记日期：网络失败时也记，避免一整天里反复重试拖慢启动。
+                // 用户随时可以用「帮助 → 检查更新」手动重试。
+                settings.LastUpdateCheckDate = today;
+                SettingsService.Save();
+
+                if (!r.Success || !r.HasUpdate || r.Info == null) return;
+                if (AppVersion.Normalize(r.Info.Version) == settings.SkippedUpdateVersion) return;
+
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null) return;
+                // BeginInvoke 返回 DispatcherOperation（可 await），显式丢弃避免 CS4014
+                var _ = dispatcher.BeginInvoke(new Action(() =>
+                {
+                    var win = new Views.UpdateWindow(r)
+                    {
+                        Owner = System.Windows.Application.Current?.MainWindow
+                    };
+                    win.Show();
+                }));
+            }
+            catch (Exception ex)
+            {
+                Log.Write("自动检查更新失败：" + ex.Message, "WARN");
+            }
         }
 
         // ================= 辅助窗口 =================

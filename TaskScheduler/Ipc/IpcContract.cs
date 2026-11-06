@@ -39,7 +39,13 @@ namespace TaskScheduler.Ipc
         /// 服务运行在 session 0，收不到这些本属于交互会话的事件，
         /// 由界面进程感知后经此命令转发，服务端 SchedulerEngine.InjectSystemEvent 触发匹配任务。
         /// </summary>
-        SystemEvent
+        SystemEvent,
+
+        /// <summary>
+        /// 任务导入的「覆盖全部」：载荷为 List&lt;AutomationTask&gt;，
+        /// 服务端一次性替换整个任务库并落盘（追加在末尾，保证新旧版本协议兼容）。
+        /// </summary>
+        ReplaceAllTasks
     }
 
     /// <summary>IPC 请求：一行 JSON（命令 + 可选 Payload JSON）</summary>

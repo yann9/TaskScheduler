@@ -66,10 +66,36 @@ function Invoke-Exe {
     }
 }
 
-# Prefer the locally installed .NET 8 SDK (has full publish support).
-$dotnet = "dotnet"
-$candidate = "C:\Users\zhouy\.dotnet8\dotnet.exe"
-if (Test-Path $candidate) { $dotnet = $candidate }
+# Locate a dotnet muxer that actually has an SDK beside it.
+# The machine-wide C:\Program Files\dotnet can be runtime-only; a per-user SDK
+# installed by dotnet-install.ps1 lives under %LOCALAPPDATA%\Microsoft\dotnet
+# and may not be on PATH in shells started before the install. Check the SDK
+# folder on disk instead of running "dotnet --list-sdks" here: an external
+# command writing to stderr would trip $ErrorActionPreference = 'Stop'.
+function Test-DotNetWithSdk([string]$exe) {
+    if (-not $exe -or -not (Test-Path $exe)) { return $false }
+    $sdkDir = Join-Path (Split-Path -Parent $exe) "sdk"
+    if (-not (Test-Path $sdkDir)) { return $false }
+    return @(Get-ChildItem -Path $sdkDir -Directory -ErrorAction SilentlyContinue).Count -gt 0
+}
+
+$dotnet = $null
+$candidates = @(
+    (Join-Path $env:LOCALAPPDATA "Microsoft\dotnet\dotnet.exe"),
+    "C:\Users\zhouy\.dotnet8\dotnet.exe",
+    (Join-Path $env:USERPROFILE ".dotnet8\dotnet.exe")
+)
+foreach ($c in $candidates) {
+    if (Test-DotNetWithSdk $c) { $dotnet = $c; break }
+}
+if (-not $dotnet) {
+    $cmd = Get-Command dotnet -ErrorAction SilentlyContinue
+    if ($cmd -and (Test-DotNetWithSdk $cmd.Source)) { $dotnet = $cmd.Source }
+}
+if (-not $dotnet) {
+    throw "No .NET SDK found. Install a .NET SDK (see README) or add it to PATH."
+}
+Write-Host "Using .NET SDK host: $dotnet"
 
 # net48 is framework-dependent: no -r / --self-contained / PublishSingleFile.
 $commonArgs = @(

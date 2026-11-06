@@ -76,6 +76,61 @@ namespace TaskScheduler.Engine
         [ObservableProperty] private bool _confirmOnDelete = true;
         [ObservableProperty] private int _taskListFontSize = 12;
 
+        // ===== 更新 =====
+        /// <summary>
+        /// 启动界面后自动检查一次更新（每天最多一次；只有发现新版本才弹窗，失败静默记日志）。
+        /// 默认开启但不会打扰：没网 / 清单不可达时只是不提示。
+        /// </summary>
+        [ObservableProperty] private bool _autoCheckUpdate = true;
+
+        /// <summary>
+        /// 自定义版本清单地址。留空 = 走内置的多源检查（国内镜像 + GitHub）。
+        ///
+        /// 填了这一项就以它为准，通常用于私有发布源 / 内网 / 自建站点；
+        /// 国内用户一般用不着填，内置的 Gitee 镜像清单已经能直连。
+        /// 格式见 UpdateService 注释与 README。
+        /// </summary>
+        [ObservableProperty] private string _updateManifestUrl = "";
+
+        /// <summary>
+        /// 国内直连的版本清单地址，默认指向 Gitee 制品仓库里本项目专属的固定文件：
+        /// https://gitee.com/yann9/dist/raw/master/TaskScheduler/update.json
+        ///
+        /// 【为什么不是 Gitee 的 releases/latest】
+        /// yann9/dist 是**所有项目共用**的 dist 制品库，按项目分子目录存放。
+        /// 仓库级 latest 会指向别的项目最新发的那个 Release，tag 也会跨项目撞名，
+        /// 所以本项目只读自己目录下的固定清单，下载链接也在同一目录里，互不干扰。
+        ///
+        /// 检查时这个地址优先于 GitHub；它 404 / 超时才回退到「GitHub 直连 + 加速节点」竞速。
+        /// 换仓库、换目录、换自建站点时整条替换即可；留空 = 禁用国内源，只用 GitHub。
+        /// 格式见 UpdateService 注释与 README。
+        /// </summary>
+        [ObservableProperty] private string _updateMirrorManifestUrl =
+            "https://gitee.com/yann9/dist/raw/master/TaskScheduler/update.json";
+
+        /// <summary>
+        /// 检查更新 / 下载时是否跟随系统代理（默认开）。
+        ///
+        /// 这一项对国内用户很关键：很多人靠代理软件访问 GitHub，早期版本为了兼容服务模式
+        /// 写死 UseProxy=false，等于把所有挂了代理的用户挡在门外。更新逻辑只跑在界面进程，
+        /// 可以放心读系统代理；若本机代理配置异常导致连不上，取消勾选即可改为纯直连。
+        /// </summary>
+        [ObservableProperty] private bool _updateUseSystemProxy = true;
+
+        /// <summary>
+        /// GitHub 加速节点前缀。留空 = 使用内置的一组公益节点并自动竞速；
+        /// 填 "direct" = 只直连、不走任何加速节点；
+        /// 填自定义前缀（多个用英文分号隔开）= 只用这些节点，例如单位自建的反向代理。
+        /// 前缀形如 https://gh-proxy.com/ ，程序会把原始 GitHub 链接拼在后面。
+        /// </summary>
+        [ObservableProperty] private string _updateProxyPrefixes = "";
+
+        /// <summary>用户点过「跳过此版本」的版本号，只忽略这一个版本</summary>
+        [ObservableProperty] private string _skippedUpdateVersion = "";
+
+        /// <summary>上次自动检查的日期（yyyy-MM-dd），保证一天最多检查一次</summary>
+        [ObservableProperty] private string _lastUpdateCheckDate = "";
+
         /// <summary>
         /// 把越界值夹回合理区间。设置文件是可以被手工改的（甚至被别的程序写坏），
         /// 一个 MaxRunRecords = 0 会让运行记录永远不保留、-1 会让裁剪逻辑直接抛异常。
@@ -93,6 +148,14 @@ namespace TaskScheduler.Engine
 
             if (TaskListFontSize < 9) TaskListFontSize = 9;
             if (TaskListFontSize > 20) TaskListFontSize = 20;
+
+            // 这几个字段来自设置文件，可能被手工改成 null；统一收敛成非 null，
+            // 免得下游 Trim() / 字符串比较到处判空。
+            UpdateManifestUrl = (UpdateManifestUrl ?? "").Trim();
+            UpdateMirrorManifestUrl = (UpdateMirrorManifestUrl ?? "").Trim();
+            UpdateProxyPrefixes = (UpdateProxyPrefixes ?? "").Trim();
+            SkippedUpdateVersion = SkippedUpdateVersion ?? "";
+            LastUpdateCheckDate = LastUpdateCheckDate ?? "";
         }
 
         /// <summary>复制一份，供"取消"时丢弃改动</summary>
@@ -110,7 +173,14 @@ namespace TaskScheduler.Engine
             NotifyOnTaskFailure = NotifyOnTaskFailure,
             PreventSleepDuringTasks = PreventSleepDuringTasks,
             ConfirmOnDelete = ConfirmOnDelete,
-            TaskListFontSize = TaskListFontSize
+            TaskListFontSize = TaskListFontSize,
+            AutoCheckUpdate = AutoCheckUpdate,
+            UpdateManifestUrl = UpdateManifestUrl,
+            UpdateMirrorManifestUrl = UpdateMirrorManifestUrl,
+            UpdateUseSystemProxy = UpdateUseSystemProxy,
+            UpdateProxyPrefixes = UpdateProxyPrefixes,
+            SkippedUpdateVersion = SkippedUpdateVersion,
+            LastUpdateCheckDate = LastUpdateCheckDate
         };
 
         /// <summary>把另一份设置的值全部抄过来（保持对象引用不变，界面绑定不会断）</summary>
@@ -130,6 +200,13 @@ namespace TaskScheduler.Engine
             PreventSleepDuringTasks = other.PreventSleepDuringTasks;
             ConfirmOnDelete = other.ConfirmOnDelete;
             TaskListFontSize = other.TaskListFontSize;
+            AutoCheckUpdate = other.AutoCheckUpdate;
+            UpdateManifestUrl = other.UpdateManifestUrl;
+            UpdateMirrorManifestUrl = other.UpdateMirrorManifestUrl;
+            UpdateUseSystemProxy = other.UpdateUseSystemProxy;
+            UpdateProxyPrefixes = other.UpdateProxyPrefixes;
+            SkippedUpdateVersion = other.SkippedUpdateVersion;
+            LastUpdateCheckDate = other.LastUpdateCheckDate;
         }
     }
 }

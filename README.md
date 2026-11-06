@@ -7,7 +7,7 @@ Windows 下基于多种**触发器 + 条件 + 动作**的定时 / 自动化任�
 ## 特性
 
 - **多种触发器**
-  - 定时触发（`TimeTrigger`）
+  - 定时触发（`TimeTrigger`）：一次性 / 每天 / 每周 / 每月 / 间隔循环 / **时间段内随机**
   - 文件监控触发（`FileWatcherTrigger`）
   - 系统事件触发（`SystemEventTrigger`，如设备接入 / 卷变动等 WMI 事件）
 - **丰富条件**（命中全部条件才执行动作）
@@ -19,6 +19,111 @@ Windows 下基于多种**触发器 + 条件 + 动作**的定时 / 自动化任�
 - **单实例 + 命名管道 IPC**：`PipeServer` / `PipeClient` 控制已运行实例（如优雅退出、状态查询）
 - **中国法定节假日**：`ChineseCalendar` + `HolidayProvider`，支撑「工作日 / 节假日」类调度逻辑
 - **运行历史、日志、托盘常驻、开机自启**（`AutoStartRegistration`）
+- **检测更新**：Gitee 国内镜像清单优先、GitHub 直连与加速节点兜底、跟随系统代理、一键下载安装
+- **任务导入导出**：全部 / 选中任务导出为 `.json`，导入可选合并追加或覆盖（覆盖前自动备份）
+
+## 时间段内随机 / 检测更新 / 任务导入导出
+
+### 时间段内随机
+
+在任务编辑器的「触发器 → 重复方式」里选 **时间段内随机**，填写起止时刻与「每隔 N 天」：
+程序每天（或每隔 N 天）在该窗口内均匀随机挑一个时刻执行。
+
+- 支持跨午夜窗口（如 `22:00` 至 `02:00`）；结束时刻小于等于起始时刻即表示延续到次日。
+- **本次抽中的时刻就是「下次运行」显示的时间**，并随任务一起存档；重启 / 重开程序不会重新抽取。
+- 可与「跳过周末 / 跳过法定节假日」叠加；该方式本身已是随机，高级页的「随机抖动」不叠加。
+- 用于「每天不定点上报」这类需要错峰的场景，和原有的「计划点 + 0–N 分钟抖动」互不干扰。
+
+实现位于 `Triggers/TimeTrigger.cs`（`ComputeRandomWindowNext`），随机窗口的日历锚点也随任务持久化，
+保证「每隔 N 天」在重启后不会重新起算。
+
+### 检测更新
+
+入口：**帮助 → 检查更新…**、关于窗口、设置页的「立即检查更新…」；
+「设置 → 更新」可关闭启动时自动检查（每天最多一次，失败静默）、填写自定义清单地址。
+
+发现新版本后可一键下载 NSIS 安装包并启动安装（程序先优雅退出以释放文件占用），
+也可选择「打开下载页」自行下载，或「跳过此版本」。
+
+#### 国内访问不了 GitHub 怎么办
+
+默认链路**不依赖 GitHub**：
+
+1. 先读 Gitee 制品仓库里本项目专属的固定清单
+   `https://gitee.com/yann9/dist/raw/master/TaskScheduler/update.json`，命中就直接用，
+   其余线路立刻取消（国内通常 0.1 秒返回）。
+2. 镜像 404 / 不可达时，GitHub 直连与多个加速节点延后 0.6 秒接手、并发竞速，
+   谁先返回合法清单用谁。
+3. 下载安装包按「清单主地址 → 备用地址 → 加速节点 → 直连」自动换线路，单条只等 12 秒。
+
+- **跟随系统代理**（默认开）：开着代理软件的用户无需任何配置；若本机代理异常反而连不上，
+  在「设置 → 更新」取消勾选即改为纯直连。
+- **换加速节点**：内置的是公益节点，可能失效或限流。在「加速节点」里填自己可用的前缀
+  （多个用英文分号隔开，如 `https://gh-proxy.com/`）；填 `direct` 则完全不走加速。
+- **国内镜像清单**：设置页可整条替换（换仓库 / 换目录 / 换自建站点）；留空 = 禁用国内源，只查 GitHub。
+- **版本清单地址**：填了就以它为准并独占（私有源 / 内网 / 自建站点），不再查公开镜像。
+  设置页点「立即检查更新」会直接使用框里尚未保存的地址，方便先试通再点「确定」。
+
+#### 发布侧：Gitee 制品仓库
+
+`yann9/dist` 是**所有项目共用**的 dist 制品库，按项目分目录，流水线只读写自己的子目录：
+
+```
+yann9/dist (master)
+├── TaskScheduler/
+│   ├── update.json                    ← 客户端读的固定清单
+│   ├── TaskScheduler-setup.exe        ← 每次发版覆盖，固定名
+│   └── TaskScheduler-portable.zip
+└── <其它项目>/                        ← 完全不碰
+```
+
+`release.yml` 在发完 GitHub Release 后，用 `GITEE_TOKEN` 把这三个文件推上去。配置方法：
+GitHub 仓库 → Settings → Secrets and variables → Actions → Secrets → `GITEE_TOKEN`
+（Gitee 私人令牌，`projects` 写权限）。可用仓库变量 `GITEE_DIST_REPO` / `GITEE_DIST_DIR`
+覆盖默认仓库与目录。**没配令牌就整步跳过**，GitHub 发布照常，客户端自动回退；
+同步失败也不会让发版失败（该步骤 `continue-on-error`）。
+
+**为什么不用 Gitee 的 `releases/latest`**：仓库是多项目共用的，latest 会指向别的项目
+最新发的那个 Release，tag 也会跨项目撞名。固定清单按目录隔离、内容完全由 CI 控制，
+还不受草稿 / 预发布干扰。客户端也兼容 Gitee Release 响应的 `created_at` 字段。
+
+**一个实测限制**：Gitee 的 `raw/` 路径对较大的 `.exe` 会返回 403（小 JSON、图片正常；
+Release 附件直链 15MB 也能免登录下载）。所以清单里总带 `fallbackUrl` 指向 GitHub Release，
+主地址失败时客户端自动换过去并套用加速节点——最坏情况只是下载绕回加速节点，
+检查更新始终国内直连。若安装包变大导致 raw 长期 403，把清单的 `url` 改成 Gitee Release
+附件直链（`https://gitee.com/{owner}/{repo}/releases/download/{tag}/{file}`）即可，客户端无需改动。
+
+清单格式（大小写不敏感，镜像与自定义清单同格式）：
+
+```json
+{
+  "version": "1.2.0",
+  "title": "1.2.0 更新",
+  "notes": "更新说明，支持多行",
+  "url": "https://gitee.com/yann9/dist/raw/master/TaskScheduler/TaskScheduler-setup.exe",
+  "fallbackUrl": "https://github.com/yann9/TaskScheduler/releases/download/v1.2.0/TaskScheduler-1.2.0-setup.exe",
+  "pageUrl": "https://gitee.com/yann9/dist/tree/master/TaskScheduler",
+  "fileName": "TaskScheduler-1.2.0-setup.exe",
+  "publishedAt": "2026-11-06T10:00:00Z"
+}
+```
+
+`version` 必填；`url` 留空时只提供「打开下载页」；`fallbackUrl` 是主地址失败后的备用下载地址，
+若属于 GitHub 域名会自动套用加速节点。版本比较按数字段进行（`1.10.0 > 1.9.0`）。
+GitHub Releases 的 latest 接口也仍是有效的回退源，会从 `assets` 里挑 `*-setup.exe`。
+
+### 任务导入导出
+
+入口：**文件 → 导入任务… / 导出全部任务… / 导出选中任务…**。
+
+- 导出文件带 `Format` / `FormatVersion` / 导出时间与程序版本，内容为触发器 / 条件 / 动作配置，
+  不含运行记录与本机排期（`NextRunTime`、`HasScheduled`、随机窗口锚点等）。
+- 导入时可选择**合并追加**（默认）或**覆盖全部**；覆盖前自动把 `tasks.json` 备份为
+  `tasks.backup-<时间戳>.json`，完成后显示备份路径。
+- 导入的任务一律重新分配 ID、**默认停用**，清掉运行记录与排期，确认无误后手动启用，避免导入瞬间双跑。
+- 服务模式下「覆盖全部」通过一次 IPC 往返在服务端原子替换任务库，不会逐条落盘留下半套数据。
+- 反序列化一律走 `JsonSafety.Persistent` 的类型白名单，外部文件不能绕过防提权闸门。
+- 兼容裸数组格式（例如手工备份的 `tasks.json` 片段），会按旧格式提示后导入。
 
 ## 技术栈
 

@@ -35,5 +35,35 @@ namespace TaskScheduler.ViewModels
             };
             return d.ShowDialog() == true ? Path.GetDirectoryName(d.FileName) : null;
         }
+
+        private const string JsonFilter = "任务文件 (*.json)|*.json|所有文件 (*.*)|*.*";
+
+        /// <summary>选择要导入的 .json 文件</summary>
+        public static string OpenJson()
+        {
+            var d = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = JsonFilter,
+                CheckFileExists = true,
+                ValidateNames = true,
+                Title = "导入任务"
+            };
+            return d.ShowDialog() == true ? d.FileName : null;
+        }
+
+        /// <summary>选择导出目标路径（自动补 .json 扩展名、覆盖前确认）</summary>
+        public static string SaveJson(string defaultName)
+        {
+            var d = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = JsonFilter,
+                FileName = defaultName ?? "tasks.json",
+                DefaultExt = ".json",
+                AddExtension = true,
+                OverwritePrompt = true,
+                Title = "导出任务"
+            };
+            return d.ShowDialog() == true ? d.FileName : null;
+        }
     }
 }

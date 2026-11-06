@@ -305,6 +305,84 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ===== 更新 ===== -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="更新"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10"
+                                   Text="新版本从哪儿查、要不要自动查"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="Lbl"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <CheckBox Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                                      Style="{StaticResource SettingCheck}"
+                                      Content="启动界面时自动检查更新（每天最多一次）"
+                                      IsChecked="{Binding Settings.AutoCheckUpdate}"
+                                      ToolTip="只有发现新版本时才弹窗；没网或清单不可达时静默跳过，不影响启动。&#10;也可以随时用「帮助 → 检查更新」手动查。"/>
+
+                            <CheckBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                      Style="{StaticResource SettingCheck}"
+                                      Content="跟随系统代理（本机开了代理软件时保持勾选）"
+                                      IsChecked="{Binding Settings.UpdateUseSystemProxy}"
+                                      ToolTip="更新检查只跑在界面进程，可以放心读系统代理。&#10;若本机代理配置异常反而导致连不上，取消勾选即可改为纯直连。"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource SettingLabel}"
+                                       Text="国内镜像清单"/>
+                            <TextBox Grid.Row="2" Grid.Column="1"
+                                     Text="{Binding Settings.UpdateMirrorManifestUrl, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="默认读 Gitee 制品仓库中 TaskScheduler/ 目录下的 update.json，国内直连。&#10;换仓库、换目录或换自建站点时整条替换；留空 = 禁用国内源，只查 GitHub。"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource SettingHint}"
+                                       TextWrapping="Wrap"
+                                       Text="检查更新时优先读这个地址，命中就不再请求 GitHub；404 或不可达时自动回退到 GitHub 直连与加速节点。制品仓库是多项目共用的，本项目只读写自己的 TaskScheduler/ 子目录，不影响其它项目。"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource SettingLabel}"
+                                       Text="版本清单地址"/>
+                            <TextBox Grid.Row="4" Grid.Column="1"
+                                     Text="{Binding Settings.UpdateManifestUrl, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="留空 = 用上方的国内镜像清单。&#10;填了就以这里为准，用于私有发布源 / 内网 / 自建站点，不再查公开镜像。"/>
+
+                            <TextBlock Grid.Row="5" Grid.Column="1" Style="{StaticResource SettingHint}"
+                                       TextWrapping="Wrap"
+                                       Text="自定义清单需含 version，可选 title / notes / url / fallbackUrl / pageUrl / fileName / publishedAt；url 指向安装包时支持一键下载安装，fallbackUrl 是主地址失败后的备用线路。"/>
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Style="{StaticResource SettingLabel}"
+                                       Text="GitHub 加速节点"/>
+                            <TextBox Grid.Row="6" Grid.Column="1"
+                                     Text="{Binding Settings.UpdateProxyPrefixes, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="留空 = 使用内置加速节点；填 direct = 只直连不走加速。&#10;也可填自己的节点前缀，多个用英文分号隔开。"/>
+
+                            <TextBlock Grid.Row="7" Grid.Column="1" Style="{StaticResource SettingHint}"
+                                       TextWrapping="Wrap"
+                                       Text="内置节点是公益服务，可能失效或限流，因此检查与下载都会自动换线路。可填自建反向代理前缀（如 https://gh-proxy.com/ ）；填 direct 则完全直连。程序会记住这次走通的节点，下载安装包时优先复用。"/>
+
+                            <Button Grid.Row="8" Grid.Column="1" Content="立即检查更新…" Width="130"
+                                    HorizontalAlignment="Left" Margin="0,8,0,0"
+                                    Command="{Binding CheckUpdateCommand}"/>
+
+                            <TextBlock Grid.Row="9" Grid.Column="1" Style="{StaticResource SettingHint}"
+                                       TextWrapping="Wrap"
+                                       Text="这里点「立即检查更新」会直接使用上方尚未保存的地址，方便先试通再点「确定」。安装前程序会先优雅退出以释放文件占用；任务配置与运行记录都在数据目录，升级不会清除。"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

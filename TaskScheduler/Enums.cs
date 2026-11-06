@@ -20,7 +20,10 @@
         Interval,
 
         /// <summary>每月：固定日 / 第 N 个星期几 / 最后一天</summary>
-        Monthly
+        Monthly,
+
+        /// <summary>时间段内随机：每天（或每隔 N 天）在指定的起止时间段内随机挑一个时刻执行，支持跨午夜</summary>
+        RandomWindow
     }
 
     /// <summary>每月触发器的“哪一天”方式</summary>

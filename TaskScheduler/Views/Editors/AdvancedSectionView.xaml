@@ -6,7 +6,7 @@
 
         <!-- ===== 随机抖动 ===== -->
         <Border Style="{StaticResource Card}"
-                Visibility="{Binding IsTimeTrigger, Converter={StaticResource BoolVis}}">
+                Visibility="{Binding ShowRandomJitter, Converter={StaticResource BoolVis}}">
             <StackPanel>
                 <TextBlock Style="{StaticResource CardTitle}" Text="随机抖动"/>
 

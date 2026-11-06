@@ -27,6 +27,8 @@ namespace TaskScheduler
             if (existing != null) _engine.RemoveTask(existing);
         }
 
+        public void ReplaceAllTasks(IReadOnlyList<AutomationTask> tasks) => _engine.ReplaceAll(tasks);
+
         public Task RunNowAsync(AutomationTask task) => _engine.RunTaskAsync(task, "手动执行");
 
         public string GetLogs() => Log.Tail(SettingsService.Current.LogTailLines);

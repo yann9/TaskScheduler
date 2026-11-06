@@ -37,6 +37,9 @@ namespace TaskScheduler.ViewModels
 
         public ICommand RestoreDefaultsCommand { get; }
 
+        /// <summary>设置页里的「立即检查更新…」（与帮助菜单走同一个窗口）</summary>
+        public ICommand CheckUpdateCommand { get; }
+
         public SettingsViewModel()
         {
             Settings = SettingsService.Current.Clone();
@@ -45,6 +48,18 @@ namespace TaskScheduler.ViewModels
             _autoStartWithWindows = AutoStartRegistration.IsEnabled();
             Settings.AutoStartMinimized = AutoStartRegistration.IsMinimizedOnStart();
             RestoreDefaultsCommand = new RelayCommand(RestoreDefaults);
+            CheckUpdateCommand = new RelayCommand(CheckUpdate);
+        }
+
+        private void CheckUpdate()
+        {
+            // 传正在编辑的副本：用户在框里刚填完自定义清单 / 加速节点，点这个按钮就能立即验证，
+            // 不必先「确定」保存；即使随后点「取消」，全局设置也不会被改动。
+            var win = new Views.UpdateWindow(null, Settings)
+            {
+                Owner = System.Windows.Application.Current?.MainWindow
+            };
+            win.ShowDialog();
         }
 
         private void RestoreDefaults()

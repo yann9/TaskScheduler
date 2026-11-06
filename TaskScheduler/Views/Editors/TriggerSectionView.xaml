@@ -51,6 +51,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <!-- 方式 -->
@@ -59,7 +60,7 @@
                         <ComboBox Width="170" ItemsSource="{Binding TimeKinds}" SelectedItem="{Binding TriggerKind}"
                                   ItemTemplate="{StaticResource EnumItem}"/>
                         <CheckBox Content="错过时补跑" IsChecked="{Binding TimeTriggerObj.RunIfMissed}" Margin="16,4,0,8"
-                                  ToolTip="引擎启动（开机 / 重启 / 重开程序）时，如果这一次的计划时间已经过去、且从未执行过，立即补执行一次。&#10;适合「每天备份」这类必须完成的活；领券、发日报这类过了点就没意义的任务不要勾。&#10;对 每天 / 每周 / 一次性 / 间隔 / 每月 均有效（间隔方式依据存档的下次执行时间判断）。"/>
+                                  ToolTip="引擎启动（开机 / 重启 / 重开程序）时，如果这一次的计划时间已经过去、且从未执行过，立即补执行一次。&#10;适合「每天备份」这类必须完成的活；领券、发日报这类过了点就没意义的任务不要勾。&#10;对 每天 / 每周 / 一次性 / 间隔 / 每月 / 时间段内随机 均有效（依据存档的下次执行时间判断）。"/>
                     </StackPanel>
 
                     <!-- 一次性 -->
@@ -165,6 +166,27 @@
                             <TextBox Width="90" Text="{Binding TimeTriggerObj.MonthlyTime, Converter={StaticResource TsConv}, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBlock Text="执行时刻" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
                         </StackPanel>
+                    </StackPanel>
+
+                    <!-- 时间段内随机（第 9 行）：起止时刻 + 每隔 N 天，Hint 位于右侧内容列 -->
+                    <TextBlock Grid.Row="9" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="随机时段"
+                               Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=RandomWindow}"/>
+                    <StackPanel Grid.Row="9" Grid.Column="1"
+                                Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=RandomWindow}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox Width="90"
+                                     Text="{Binding TimeTriggerObj.RandomWindowStart, Converter={StaticResource TsConv}, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="起始时刻，格式 HH:mm，例如 09:00。"/>
+                            <TextBlock Text="至" VerticalAlignment="Top" Margin="12,6,8,0" Foreground="#3C4043"/>
+                            <TextBox Width="90"
+                                     Text="{Binding TimeTriggerObj.RandomWindowEnd, Converter={StaticResource TsConv}, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="结束时刻，格式 HH:mm。小于等于起始时刻表示跨午夜延续到次日，例如 22:00 至 02:00。"/>
+                            <TextBlock Text="每隔" VerticalAlignment="Top" Margin="12,6,8,0" Foreground="#3C4043"/>
+                            <TextBox Width="60" Text="{Binding TimeTriggerObj.RandomWindowDaysInterval, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Text="天" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#3C4043"/>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap"
+                                   Text="每天（或每隔 N 天）在起止时间段内随机挑一个时刻执行，支持跨午夜（如 22:00–02:00）；下次执行时间显示的就是本次随机点，重启不会重新抽取；配合「跳过周末/节假日」可只在工作日执行。"/>
                     </StackPanel>
                 </Grid>
             </StackPanel>

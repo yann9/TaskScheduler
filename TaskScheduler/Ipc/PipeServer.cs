@@ -147,6 +147,17 @@ namespace TaskScheduler.Ipc
                             if (existing != null) _engine.RemoveTask(existing);
                             return Ok("deleted");
                         }
+                    case IpcCommand.ReplaceAllTasks:
+                        {
+                            // 载荷走 IpcJson.Settings（带白名单绑定器）：管道客户端可能是本机任意用户，
+                            // 而这里以 LocalSystem 反序列化，绝不能用裸 JsonConvert。
+                            var list = string.IsNullOrWhiteSpace(req.Payload)
+                                ? new List<AutomationTask>()
+                                : JsonConvert.DeserializeObject<List<AutomationTask>>(req.Payload, IpcJson.Settings)
+                                  ?? new List<AutomationTask>();
+                            _engine.ReplaceAll(list);
+                            return Ok("replaced");
+                        }
                     case IpcCommand.RunNow:
                         {
                             var t = JsonConvert.DeserializeObject<AutomationTask>(req.Payload, IpcJson.Settings);

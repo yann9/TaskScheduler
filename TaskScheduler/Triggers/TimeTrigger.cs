@@ -8,8 +8,8 @@ using TaskScheduler.Engine;
 namespace TaskScheduler.Triggers
 {
         /// <summary>
-        /// 时间触发器：支持 一次性 / 每天 / 每周 / 每月 / 间隔 五种方式，
-        /// 另可叠加随机抖动、跳过周末与法定节假日。
+        /// 时间触发器：支持 一次性 / 每天 / 每周 / 每月 / 间隔 / 时间段内随机 六种方式，
+        /// 另可叠加随机抖动、跳过周末与法定节假日（「时间段内随机」本身即随机点，不叠加抖动）。
         /// 内部用单个 Timer 到点触发并自动重排下一次。
         /// </summary>
     public class TimeTrigger : ITrigger
@@ -61,6 +61,31 @@ namespace TaskScheduler.Triggers
 
         /// <summary>"首次延迟"的单位（仅 FirstRunMode = AfterDelay 时有效）</summary>
         public IntervalUnit FirstRunDelayUnit { get; set; } = IntervalUnit.Minutes;
+
+        // 时间段内随机
+        /// <summary>
+        /// 随机时段的起始时刻（默认 09:00）。旧存档里没有该字段，反序列化后取默认值；
+        /// 由于旧任务的 Kind 不可能是 RandomWindow，这些默认值不会影响任何已有触发方式的行为。
+        /// </summary>
+        public TimeSpan RandomWindowStart { get; set; } = new TimeSpan(9, 0, 0);
+
+        /// <summary>
+        /// 随机时段的结束时刻（默认 10:00）。小于等于起始时刻表示窗口跨午夜延续到次日；
+        /// 与起始时刻相等时按整整一天（24 小时）的窗口处理。
+        /// </summary>
+        public TimeSpan RandomWindowEnd { get; set; } = new TimeSpan(10, 0, 0);
+
+        /// <summary>每隔多少天挑一个窗口执行（默认 1 = 每天）；小于 1 时按 1 处理</summary>
+        public int RandomWindowDaysInterval { get; set; } = 1;
+
+        /// <summary>
+        /// 「每隔 N 天」的内部锚点：本次随机窗口所在的日期（0 点），用于让执行日序列
+        /// 按绝对日历对齐、不随重启 / 重开程序漂移。首次排期取当前日期写入，
+        /// 之后每次排期写回本次选中的窗口日。
+        /// 注意：这不是用户配置项，也不进排期签名（改它不应触发重排），但必须随任务持久化，
+        /// 否则重启后锚点丢失、周期会从重启当天重新起算。
+        /// </summary>
+        public DateTime? RandomWindowAnchorDate { get; set; }
 
         /// <summary>
         /// 错过补偿：引擎启动（含开机 / 重启 / 引擎重启）时，若上一个计划时间点已经过去、
@@ -178,9 +203,11 @@ namespace TaskScheduler.Triggers
             if (NextRunTime == null) { RaiseScheduleChanged(); return; }
 
             // 计划点不动，只把"实际唤醒时刻"往后随推 0–N 分钟。
+            // 「时间段内随机」的 NextRunTime 本身就是窗口内抽出的随机点，
+            // 再叠加抖动会把唤醒时刻推到用户设定的时间段之外，所以该方式跳过抖动。
             var plan = NextRunTime.Value;
             var fireAt = plan;
-            if (RandomJitterMinutes > 0 && plan > DateTime.Now)
+            if (Kind != TimeTriggerKind.RandomWindow && RandomJitterMinutes > 0 && plan > DateTime.Now)
                 fireAt = plan.AddMilliseconds(NextJitterMilliseconds(RandomJitterMinutes));
 
             Arm(fireAt);
@@ -320,9 +347,84 @@ namespace TaskScheduler.Triggers
                     return from.Add(step);
                 }
 
+                case TimeTriggerKind.RandomWindow:
+                    return ComputeRandomWindowNext(from);
+
                 default:
                     return null;
             }
+        }
+
+        /// <summary>
+        /// 「时间段内随机」的下一次执行时间。
+        ///
+        /// 关键语义：算出来的随机点本身就是 <see cref="NextRunTime"/>（不是"计划点 + 抖动"），
+        /// 所以界面显示的"下次执行时间"就是本次真实执行时刻；该值随任务一起存档，
+        /// 重启 / 重开程序时 <see cref="Start"/> 的"存档计划点还在未来就沿用"分支会直接沿用，
+        /// 不会重新抽点（否则每次开机执行时间都会变）。
+        /// 触发后 <see cref="OnTimerElapsed"/> 以 DateTime.Now 再次调用本方法，
+        /// 因为要求窗口起点严格晚于当前时刻，不会在同一天再次选中同一个窗口，也就不会重复执行。
+        /// </summary>
+        private DateTime? ComputeRandomWindowNext(DateTime from)
+        {
+            // 起止时刻归一化到 [0, 24h)：用户可能填了 25:00、负数或跨多天的值，
+            // 直接加到日期上会超出 DateTime 范围抛异常。TimeSpan 没有 TimeOfDay 属性，
+            // 这里用"按一天的 ticks 取模、负数回绕"实现同样的归一化效果。
+            var start = NormalizeToDay(RandomWindowStart);
+            var end = NormalizeToDay(RandomWindowEnd);
+
+            // 窗口长度：end > start 是当天内的一段；end <= start 表示跨午夜延续到次日
+            // （end == start 视为整整 24 小时）。长度异常时兜底为 1 分钟，避免随机区间退化。
+            var length = end > start
+                ? end - start
+                : TimeSpan.FromHours(24) - (start - end);
+            if (length <= TimeSpan.Zero) length = TimeSpan.FromMinutes(1);
+
+            // 锚点：首次取当前日期，之后沿用存档值，让"每隔 N 天"按绝对日历对齐、不随重启漂移。
+            if (!RandomWindowAnchorDate.HasValue) RandomWindowAnchorDate = from.Date;
+            var anchor = RandomWindowAnchorDate.Value.Date;
+            int step = Math.Max(1, RandomWindowDaysInterval);
+
+            // 从前一天开始逐日扫描（最多 400 天兜底）：跨午夜窗口的随机点可能落在次日凌晨，
+            // 此时 from.Date 已经变成次日，从 -1 起能覆盖到"窗口起始日仍比 from.Date 早一天"的边界；
+            // 而 wStart 严格晚于 from，保证选中当天晚上尚未到达的窗口、不会整跳一天。
+            var scanStart = from.Date.AddDays(-1);
+            for (int i = 0; i < 400; i++)
+            {
+                var day = scanStart.AddDays(i);
+                int diff = (day - anchor).Days;
+                if (diff < 0 || diff % step != 0) continue;
+
+                var wStart = day.Add(start);
+                if (wStart <= from) continue;
+
+                // 在 [wStart, wStart + length) 内均匀取一个随机毫秒偏移。
+                // 用 double 计算而非 int：窗口最长 24h = 86400000ms 虽小于 int.MaxValue，
+                // 但 double 更稳妥（长度理论上更大时也不会溢出）。
+                // 复用全局 Random 并加锁 —— Random 不是线程安全的。
+                double offsetMs = 0;
+                lock (_jitterLock)
+                {
+                    offsetMs = _jitterRandom.NextDouble() * length.TotalMilliseconds;
+                }
+                var point = wStart.AddMilliseconds(offsetMs);
+
+                // 写回本次窗口日，供下一次按同一日历节奏对齐（不进排期签名）。
+                RandomWindowAnchorDate = day;
+
+                // 过跳过规则：命中周末 / 节假日时保持时刻顺延，仍落在同一时间段口径内，语义合理。
+                return ApplySkipRules(point);
+            }
+
+            return null;
+        }
+
+        /// <summary>把任意 TimeSpan 归一化到 [0, 24h)，便于安全地与 DateTime.Date 相加</summary>
+        private static TimeSpan NormalizeToDay(TimeSpan value)
+        {
+            long ticks = value.Ticks % TimeSpan.TicksPerDay;
+            if (ticks < 0) ticks += TimeSpan.TicksPerDay;
+            return TimeSpan.FromTicks(ticks);
         }
 
         /// <summary>
@@ -346,7 +448,9 @@ namespace TaskScheduler.Triggers
             WeeklyTime,
             (int)MonthlyKind, MonthlyDay, MonthlyNth, (int)MonthlyWeekday, MonthlyTime,
             IntervalValue, (int)IntervalUnit,
-            RandomJitterMinutes, SkipWeekend, SkipHolidays, ExtraSkipDates.Trim());
+            RandomJitterMinutes, SkipWeekend, SkipHolidays, ExtraSkipDates.Trim(),
+            // 「时间段内随机」的排期参数；锚点 RandomWindowAnchorDate 是内部状态，不进签名。
+            RandomWindowStart, RandomWindowEnd, RandomWindowDaysInterval);
 
         /// <summary>
         /// 首次运行参数签名（仅间隔方式有意义，其他方式恒为空串）。
@@ -534,6 +638,9 @@ namespace TaskScheduler.Triggers
                     return ComputeMonthly(now, false);
 
                 default:
+                    // 间隔 / 时间段内随机都没有可凭空反推的固定计划点：RandomWindow 的随机点
+                    // 带随机性、无法由当前时刻推算，错过补偿只能依赖存档的 MissedPlanPoint
+                    //（即 NextRunTime 里那个已过去的随机点），故这里返回 null 交给存档值兜底。
                     return null;
             }
         }
@@ -543,7 +650,15 @@ namespace TaskScheduler.Triggers
             var core = DescribeCore();
             var extra = new List<string>();
 
-            if (RandomJitterMinutes > 0) extra.Add($"随机抖动 0–{RandomJitterMinutes} 分钟");
+            // 「时间段内随机」的下次执行时间本身就是随机点，抖动不会叠加（见 Schedule），
+            // 所以不显示误导性的抖动文案，只给一句说明；其余方式照旧。
+            if (RandomJitterMinutes > 0)
+            {
+                if (Kind == TimeTriggerKind.RandomWindow)
+                    extra.Add("「时间段内随机」已包含随机，抖动不叠加");
+                else
+                    extra.Add($"随机抖动 0–{RandomJitterMinutes} 分钟");
+            }
 
             // 间隔方式没有"哪一天"的概念，跳过规则对它无效，描述里也就不该出现
             if (Kind != TimeTriggerKind.Interval)
@@ -600,6 +715,18 @@ namespace TaskScheduler.Triggers
                     else if (FirstRunMode == IntervalFirstRunMode.AfterDelay)
                         first = $"，首次延迟 {Math.Max(0, FirstRunDelayValue)} {(FirstRunDelayUnit == IntervalUnit.Hours ? "小时" : "分钟")}";
                     return $"每隔 {IntervalValue} {unit}{first}";
+                }
+                case TimeTriggerKind.RandomWindow:
+                {
+                    // 用归一化后的起止时刻描述，与实际排期口径一致（避免 25:00 / 负值显示怪异）。
+                    var s = NormalizeToDay(RandomWindowStart);
+                    var e = NormalizeToDay(RandomWindowEnd);
+                    var startTxt = s.ToString(@"hh\:mm");
+                    var endTxt = e.ToString(@"hh\:mm");
+                    // end <= start 表示窗口跨午夜延续到次日，显式标注「次日」避免误读。
+                    if (e <= s) endTxt = "次日 " + endTxt;
+                    var step = Math.Max(1, RandomWindowDaysInterval);
+                    return $"每天 {startTxt}–{endTxt} 之间随机（每 {step} 天）";
                 }
                 default:
                     return "时间触发";
