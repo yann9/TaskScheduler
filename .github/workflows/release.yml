@@ -250,11 +250,14 @@ jobs:
       # 可用仓库变量 GITEE_DIST_REPO / GITEE_DIST_DIR 覆盖默认仓库与子目录。
       - name: Sync artifacts to Gitee dist repo
         shell: pwsh
-        continue-on-error: true
+        # 不再用 continue-on-error 掩盖失败：没配令牌时由脚本自己 exit 0 跳过，
+        # 配了令牌却推不上去是真正的发布事故，必须让这次 run 变红。
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_REPO: ${{ vars.GITEE_DIST_REPO || 'yann9/dist' }}
           GITEE_DIR: ${{ vars.GITEE_DIST_DIR || 'TaskScheduler' }}
+          # 令牌所属账号的登录名；默认取仓库 owner，令牌属于其它账号时可用仓库变量覆盖。
+          GITEE_USER: ${{ vars.GITEE_DIST_USER || '' }}
         run: |
           $ErrorActionPreference = 'Stop'
           if (-not $env:GITEE_TOKEN) {
@@ -286,22 +289,54 @@ jobs:
           }
           $json = $manifest | ConvertTo-Json -Depth 5
 
-          # 令牌经 http.extraheader 注入：不拼进 remote URL，日志里也不会出现。
+          # 认证：Gitee 的 git-over-HTTPS 只认 URL 内嵌的「登录名:私人令牌」，
+          # 之前用 http.https://gitee.com/.extraheader 注入 Basic 头在 push 时没生效
+          # （clone 是公开仓库免登录，掩盖了这一点），服务器 401 后 CI 又不能交互输入，
+          # 于是报 "could not read Username for 'https://gitee.com'"。
+          # 现在主用凭据 URL，同时保留一个「全局」http.extraHeader 兜底（URL 限定版不生效）。
           $owner = $repo.Split('/')[0]
-          $basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("$owner`:$($env:GITEE_TOKEN)"))
-          $gitCfg = "http.https://gitee.com/.extraheader=AUTHORIZATION: basic $basic"
+          $user = if ($env:GITEE_USER) { $env:GITEE_USER.Trim() } else { $owner }
+          $token = $env:GITEE_TOKEN.Trim()
+          $basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("$user`:$token"))
+          $cfgHeader = "http.extraHeader=AUTHORIZATION: basic $basic"
+          # 清掉 runner 注入的 credential helper（它只对 github.com 有意义），
+          # 并彻底关闭交互提示，避免 GCM 在无人值守环境里尝试弹窗。
+          $cfgNoCred = 'credential.helper='
+          $env:GIT_TERMINAL_PROMPT = '0'
+          $env:GCM_INTERACTIVE = 'Never'
+          $credUrl = "https://$([uri]::EscapeDataString($user)):$([uri]::EscapeDataString($token))@gitee.com/$repo.git"
+
+          # 所有 git 输出统一脱敏：令牌、URL 转义后的令牌、Base64 凭据都不进日志
+          # （GitHub 只会 mask secret 原文，转义/编码后的形式它认不出来）。
+          function Invoke-Git {
+            param([string[]]$GitArgs)
+            # 原生命令的 stderr 不能因为外层 ErrorActionPreference=Stop 变成终止错误。
+            $ErrorActionPreference = 'Continue'
+            $lines = & git @GitArgs 2>&1
+            $code = $LASTEXITCODE
+            foreach ($line in $lines) {
+              $safe = [string]$line
+              $safe = $safe.Replace($token, '***')
+              $safe = $safe.Replace([uri]::EscapeDataString($token), '***')
+              $safe = $safe.Replace($basic, '***')
+              Write-Host $safe
+            }
+            return $code
+          }
 
           $work = Join-Path $env:RUNNER_TEMP 'gitee-dist-sync'
           if (Test-Path $work) { Remove-Item $work -Recurse -Force }
-          git -c $gitCfg clone --depth 1 --branch master "https://gitee.com/$repo.git" $work
-          if ($LASTEXITCODE -ne 0) { throw 'git clone failed' }
+          Write-Host "Cloning https://gitee.com/$repo (master) ..."
+          if ((Invoke-Git @('-c', $cfgHeader, '-c', $cfgNoCred, 'clone', '--depth', '1', '--branch', 'master', $credUrl, $work)) -ne 0) {
+            throw 'git clone failed (check GITEE_TOKEN permissions: 私人令牌需要 projects 写权限)'
+          }
 
           Push-Location $work
           try {
-            git config user.name 'github-actions[bot]'
-            git config user.email 'github-actions[bot]@users.noreply.github.com'
+            Invoke-Git @('config', 'user.name', 'github-actions[bot]') | Out-Null
+            Invoke-Git @('config', 'user.email', 'github-actions[bot]@users.noreply.github.com') | Out-Null
             # 制品仓库可能仍是空白 master（连一个 commit 都没有），显式把 HEAD 指过去。
-            git symbolic-ref HEAD refs/heads/master
+            Invoke-Git @('symbolic-ref', 'HEAD', 'refs/heads/master') | Out-Null
 
             $target = Join-Path (Get-Location).Path $dir
             New-Item -ItemType Directory -Path $target -Force | Out-Null
@@ -310,12 +345,14 @@ jobs:
             Copy-Item (Join-Path $root $portable) (Join-Path $target 'TaskScheduler-portable.zip') -Force
 
             # 只暂存本项目目录：共用仓库里其它项目的文件不受影响。
-            git add -- "$dir"
-            git diff --cached --quiet
-            if ($LASTEXITCODE -ne 0) {
-              git commit -m "chore: publish TaskScheduler v$v"
-              git -c $gitCfg push origin HEAD:master
-              if ($LASTEXITCODE -ne 0) { throw 'git push failed' }
+            if ((Invoke-Git @('add', '--', $dir)) -ne 0) { throw 'git add failed' }
+            $diffCode = Invoke-Git @('diff', '--cached', '--quiet')
+            if ($diffCode -ne 0) {
+              if ((Invoke-Git @('commit', '-m', "chore: publish TaskScheduler v$v")) -ne 0) { throw 'git commit failed' }
+              # origin 已经是带凭据的 URL，再叠加 header 与禁用 helper 兜底。
+              if ((Invoke-Git @('-c', $cfgHeader, '-c', $cfgNoCred, 'push', 'origin', 'HEAD:master')) -ne 0) {
+                throw 'git push failed (check GITEE_TOKEN / GITEE_DIST_USER permissions)'
+              }
               Write-Host "Synced to https://gitee.com/$repo/tree/master/$dir"
             } else {
               Write-Host 'No changes - Gitee artifacts are already up to date.'

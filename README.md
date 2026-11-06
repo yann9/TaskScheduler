@@ -80,8 +80,14 @@ yann9/dist (master)
 `release.yml` 在发完 GitHub Release 后，用 `GITEE_TOKEN` 把这三个文件推上去。配置方法：
 GitHub 仓库 → Settings → Secrets and variables → Actions → Secrets → `GITEE_TOKEN`
 （Gitee 私人令牌，`projects` 写权限）。可用仓库变量 `GITEE_DIST_REPO` / `GITEE_DIST_DIR`
-覆盖默认仓库与目录。**没配令牌就整步跳过**，GitHub 发布照常，客户端自动回退；
-同步失败也不会让发版失败（该步骤 `continue-on-error`）。
+覆盖默认仓库与目录；令牌不属于仓库 owner 时，用 `GITEE_DIST_USER` 指定令牌所属账号的登录名。
+**没配令牌就整步跳过**，GitHub 发布照常，客户端自动回退；配了令牌却推不上去会让这次
+run 变红（早期版本用 `continue-on-error` 把失败包成绿勾，容易漏看）。
+
+认证走 Gitee 官方支持的 `https://<登录名>:<私人令牌>@gitee.com/...` 凭据 URL，
+并额外带一个全局 `http.extraHeader` 兜底：URL 限定版的 `http.https://gitee.com/.extraheader`
+在 `git push` 时不会生效（公开仓库 clone 免登录，会把这个问题掩盖到 push 才暴露）。
+所有 git 输出都做了脱敏，令牌及其 URL 转义 / Base64 形式都不会写进日志。
 
 **为什么不用 Gitee 的 `releases/latest`**：仓库是多项目共用的，latest 会指向别的项目
 最新发的那个 Release，tag 也会跨项目撞名。固定清单按目录隔离、内容完全由 CI 控制，
