@@ -326,7 +326,10 @@ jobs:
             }
           } catch {
             $c = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
-            $diag += "repo API HTTP $c"
+            # Gitee 对「公开仓库 + 有效令牌」的详情端点有时返回 404（隐藏存在性），
+            # 实测匿名 200、带令牌 404，不能据此判定令牌无效，所以不写进 diag。
+            if ($c -eq 401 -or $c -eq 403) { $diag += "repo API HTTP $c（令牌可能缺少 projects 权限）" }
+            Write-Host "repo API HTTP $c (informational only)"
           }
           Write-Host "git HTTPS user = $user"
 
@@ -368,6 +371,22 @@ jobs:
             # 制品仓库可能仍是空白 master（连一个 commit 都没有），显式把 HEAD 指过去。
             Invoke-Git @('symbolic-ref', 'HEAD', 'refs/heads/master') | Out-Null
 
+            # 关键：制品仓库根的 .gitattributes 把 *.exe / *.zip 交给 Git LFS，
+            # 而 Gitee 免费版不支持 LFS（"LFS only supported repository in paid or trial
+            # enterprise"），push 会在 LFS batch 阶段失败。用 .git/info/attributes 在
+            # 本次临时 clone 内取消 filter —— 该文件不进版本库，既不改共享的 .gitattributes，
+            # 也不影响其它项目目录；产物只有几百 KB，作为普通二进制提交完全够用。
+            $infoDir = Join-Path (Get-Location).Path '.git/info'
+            New-Item -ItemType Directory -Path $infoDir -Force | Out-Null
+            Set-Content -Path (Join-Path $infoDir 'attributes') -Value @(
+              '*.exe -filter -diff -merge -text',
+              '*.zip -filter -diff -merge -text',
+              '*.rar -filter -diff -merge -text',
+              '*.tar -filter -diff -merge -text',
+              '*.tar.gz -filter -diff -merge -text'
+            ) -Encoding ascii
+            Invoke-Git @('config', '--local', 'filter.lfs.required', 'false') | Out-Null
+
             $target = Join-Path (Get-Location).Path $dir
             New-Item -ItemType Directory -Path $target -Force | Out-Null
             Set-Content -Path (Join-Path $target 'update.json') -Value $json -Encoding utf8
@@ -376,6 +395,16 @@ jobs:
 
             # 只暂存本项目目录：共用仓库里其它项目的文件不受影响。
             if ((Invoke-Git @('add', '--', $dir)) -ne 0) { throw 'git add failed' }
+            # 断言：暂存区里应是真实二进制，而不是 LFS 的 ~130 字节指针文本。
+            foreach ($f in @('TaskScheduler-setup.exe', 'TaskScheduler-portable.zip')) {
+              $raw = (& git cat-file -s ":$dir/$f" 2>&1 | Out-String).Trim()
+              $blobSize = 0
+              [void][int]::TryParse($raw, [ref]$blobSize)
+              Write-Host "staged $f blob size = $blobSize bytes"
+              if ($blobSize -lt 1000) {
+                throw "$f 仍被 Git LFS 转成指针（Gitee 免费版不支持 LFS），请检查 .git/info/attributes 覆盖是否生效"
+              }
+            }
             $diffCode = Invoke-Git @('diff', '--cached', '--quiet')
             if ($diffCode -ne 0) {
               if ((Invoke-Git @('commit', '-m', "chore: publish TaskScheduler v$v")) -ne 0) { throw 'git commit failed' }

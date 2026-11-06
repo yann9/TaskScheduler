@@ -91,6 +91,12 @@ run 变红（早期版本用 `continue-on-error` 把失败包成绿勾，容易�
 令牌自检会用 `/api/v5/user` 确认令牌有效性并取真实登录名，用 `/api/v5/repos/...` 确认 push 权限，
 诊断结果会打印在 CI 日志里。所有 git 输出都做了脱敏，令牌及其 URL 转义形式都不会写进日志。
 
+**另一个实测坑**：`yann9/dist` 根目录的 `.gitattributes` 把 `*.exe` / `*.zip` 交给 Git LFS，
+而 Gitee 免费版不支持 LFS（`LFS only supported repository in paid or trial enterprise`），
+push 会在 LFS batch 阶段失败。流水线在临时 clone 里用 `.git/info/attributes` 取消 filter
+（不进版本库、不改共享配置、不影响其它项目），并在提交前断言两个二进制仍是真实文件而非
+~130 字节的 LFS 指针。制品只有几百 KB，作为普通二进制存即可。
+
 **为什么不用 Gitee 的 `releases/latest`**：仓库是多项目共用的，latest 会指向别的项目
 最新发的那个 Release，tag 也会跨项目撞名。固定清单按目录隔离、内容完全由 CI 控制，
 还不受草稿 / 预发布干扰。客户端也兼容 Gitee Release 响应的 `created_at` 字段。
