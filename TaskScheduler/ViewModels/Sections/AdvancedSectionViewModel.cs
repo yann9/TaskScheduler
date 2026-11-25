@@ -34,8 +34,11 @@ namespace TaskScheduler.ViewModels.Sections
                 var parts = new System.Collections.Generic.List<string>();
                 if (Task.Trigger is TimeTrigger tt)
                 {
-                    // 「时间段内随机」不叠加抖动（见 TimeTrigger.Schedule），摘要里也别显示这条
-                    if (tt.RandomJitterMinutes > 0 && tt.Kind != TimeTriggerKind.RandomWindow)
+                    // 自身已带随机 / 精确时刻语义的方式不叠加抖动（见 TimeTrigger.SuppressJitter），
+                    // 摘要里也别显示这条配了却不生效的设置
+                    if (tt.RandomJitterMinutes > 0
+                        && tt.Kind != TimeTriggerKind.Calendar
+                        && tt.Kind != TimeTriggerKind.Window)
                         parts.Add("抖动 " + tt.RandomJitterMinutes + " 分钟");
                     if (tt.SkipWeekend) parts.Add("跳过周末");
                     if (tt.SkipHolidays) parts.Add("跳过节假日");
@@ -53,13 +56,14 @@ namespace TaskScheduler.ViewModels.Sections
 
         /// <summary>
         /// 是否显示「随机抖动」卡片。
-        /// 「时间段内随机」算出的下次执行时间本身就是窗口内抽出的随机点，
-        /// 再叠加抖动会把实际唤醒时刻推到用户设定的时间段之外（Schedule 里也特意跳过了抖动），
-        /// 所以该方式下把这组设置隐藏，避免「配了却不生效」的困惑。
+        /// 「日历排期」的时刻是用户指定的精确点；「时段内执行」的点排在窗口内 ——
+        /// 两者叠加抖动都会破坏时刻语义（Schedule 里也跳过了抖动），所以隐藏这组设置，
+        /// 避免「配了却不生效」。只有「连续间隔」才允许抖动。
         /// 与 ShowSkipRules 一样依赖触发器分区的 TriggerKind，变化时在 OnTriggerSectionChanged 里刷新。
         /// </summary>
         public bool ShowRandomJitter
-            => IsTimeTrigger && Host.TriggerSection.TriggerKind != TimeTriggerKind.RandomWindow;
+            => IsTimeTrigger
+               && Host.TriggerSection.TriggerKind == TimeTriggerKind.Interval;
 
         /// <summary>
         /// 是否显示"跳过周末 / 节假日"这组设置。

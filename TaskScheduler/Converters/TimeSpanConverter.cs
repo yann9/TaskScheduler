@@ -4,13 +4,19 @@ using System.Windows.Data;
 
 namespace TaskScheduler.Converters
 {
-    /// <summary>TimeSpan &lt;-&gt; "HH:mm" 双向转换（仅取时分）</summary>
+    /// <summary>
+    /// TimeSpan &lt;-&gt; "HH:mm" 双向转换；ConverterParameter 传 "sec" 时显示 "HH:mm:ss"。
+    /// 回写始终走 TimeText.TryParseTimeOfDay（本来就支持可选的秒段），
+    /// 所以旧绑定不传参数仍是 HH:mm，新绑定传 sec 才显示秒。
+    /// </summary>
     public class TimeSpanConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             if (value is TimeSpan ts)
-                return $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}";
+                return "sec".Equals(parameter as string, StringComparison.OrdinalIgnoreCase)
+                    ? $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+                    : $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}";
             return "00:00";
         }
 

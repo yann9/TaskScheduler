@@ -60,8 +60,17 @@ namespace TaskScheduler.ViewModels.Sections
         // ===== 下拉框数据源 =====
         public List<TriggerType> TriggerTypes { get; } =
             Enum.GetValues(typeof(TriggerType)).Cast<TriggerType>().ToList();
-        public List<TimeTriggerKind> TimeKinds { get; } =
-            Enum.GetValues(typeof(TimeTriggerKind)).Cast<TimeTriggerKind>().ToList();
+        /// <summary>界面只暴露三类统一规则；旧八种由存档迁移，不出现在下拉框里。</summary>
+        public List<TimeTriggerKind> TimeKinds { get; } = new List<TimeTriggerKind>
+        {
+            TimeTriggerKind.Calendar,
+            TimeTriggerKind.Window,
+            TimeTriggerKind.Interval
+        };
+        public List<CalendarDayMode> CalendarDayModes { get; } =
+            Enum.GetValues(typeof(CalendarDayMode)).Cast<CalendarDayMode>().ToList();
+        public List<WindowMode> WindowModes { get; } =
+            Enum.GetValues(typeof(WindowMode)).Cast<WindowMode>().ToList();
         public List<SystemEventType> SystemEvents { get; } =
             Enum.GetValues(typeof(SystemEventType)).Cast<SystemEventType>().ToList();
         public List<FileWatcherChangeType> FileChanges { get; } =
@@ -89,6 +98,8 @@ namespace TaskScheduler.ViewModels.Sections
         [ObservableProperty] private SystemEventType? _systemEventType;
         [ObservableProperty] private IntervalFirstRunMode? _firstRunMode;
         [ObservableProperty] private MonthlyMode? _monthlyKind;
+        [ObservableProperty] private CalendarDayMode? _calendarDayMode;
+        [ObservableProperty] private WindowMode? _windowMode;
 
         /// <summary>“每周”的星期勾选（与条件里的“允许时段”各持一份，互不干扰）</summary>
         public ObservableCollection<WeekdayOption> WeekdayOptions { get; }
@@ -138,14 +149,39 @@ namespace TaskScheduler.ViewModels.Sections
             var t = TimeTriggerObj;
             if (t != null && value.HasValue) t.Kind = value.Value;
 
-            // 一次性任务若没填时间，NextRunTime 算出来是 null → 永不执行、且界面上没有任何提示。
-            // 切到"一次性"时给个合理默认值（明天 09:00），避免任务静默失效。
-            if (t != null && value == TimeTriggerKind.OneTime && !t.TargetTime.HasValue)
+            // 新建的「日历排期」默认每天 09:00，保证立刻有一条可执行规则，
+            // 不会出现"切过去了但什么都没配、任务静默失效"的空状态。
+            if (t != null && value == TimeTriggerKind.Calendar && string.IsNullOrWhiteSpace(t.CalendarTimes))
             {
-                t.TargetTime = DateTime.Now.Date.AddDays(1).AddHours(9);
-                OnPropertyChanged(nameof(TimeTriggerObj)); // 模型类不发通知，手动刷新绑定
+                t.CalendarTimes = "09:00";
+                OnPropertyChanged(nameof(TimeTriggerObj));
             }
 
+            Host.NotifyStructureChanged();
+        }
+
+        partial void OnCalendarDayModeChanged(CalendarDayMode? value)
+        {
+            if (_initializing) return;
+            var t = TimeTriggerObj;
+            if (t == null || !value.HasValue) return;
+            t.CalendarDayMode = value.Value;
+
+            // 「指定日期」默认填明天，避免空列表导致 ComputeNext 返回 null、任务永不执行。
+            if (value.HasValue && value.Value == TaskScheduler.CalendarDayMode.SpecificDates && string.IsNullOrWhiteSpace(t.CalendarDates))
+            {
+                t.CalendarDates = DateTime.Now.Date.AddDays(1).ToString("yyyy-MM-dd");
+                OnPropertyChanged(nameof(TimeTriggerObj));
+            }
+            Host.NotifyStructureChanged();
+        }
+
+        partial void OnWindowModeChanged(WindowMode? value)
+        {
+            if (_initializing) return;
+            var t = TimeTriggerObj;
+            if (t == null || !value.HasValue) return;
+            t.WindowMode = value.Value;
             Host.NotifyStructureChanged();
         }
 
@@ -185,6 +221,9 @@ namespace TaskScheduler.ViewModels.Sections
             SystemEventType = SystemTriggerObj?.EventType;
             FirstRunMode = TimeTriggerObj?.FirstRunMode;
             MonthlyKind = TimeTriggerObj?.MonthlyKind;
+            CalendarDayMode = TimeTriggerObj?.CalendarDayMode;
+            WindowMode = TimeTriggerObj?.WindowMode;
+            WeekdayOptionBuilder.Rebuild(WeekdayOptions, TimeTriggerObj?.CalendarWeekdays, ApplyWeeklyDays);
 
             OnPropertyChanged(nameof(ShowProcessFilter));
             Refresh();
@@ -200,9 +239,13 @@ namespace TaskScheduler.ViewModels.Sections
             TriggerKind = tt?.Kind;
             FirstRunMode = tt?.FirstRunMode;
             MonthlyKind = tt?.MonthlyKind;
+            CalendarDayMode = tt?.CalendarDayMode;
+            WindowMode = tt?.WindowMode;
             SystemEventType = (Task.Trigger as SystemEventTrigger)?.EventType;
 
-            WeekdayOptionBuilder.Rebuild(WeekdayOptions, tt?.WeeklyDays, ApplyWeeklyDays);
+            // 统一后"每周"的星期勾选落在 CalendarWeekdays；旧 WeeklyDays 仅作迁移来源，
+            // 迁移完成后不再被 UI 读写。
+            WeekdayOptionBuilder.Rebuild(WeekdayOptions, tt?.CalendarWeekdays, ApplyWeeklyDays);
         }
 
         /// <summary>把界面上勾的星期写回触发器（勾选一变就调用，不必等点确定）</summary>
@@ -210,7 +253,7 @@ namespace TaskScheduler.ViewModels.Sections
         {
             var tt = TimeTriggerObj;
             if (tt == null) return;
-            tt.WeeklyDays = WeekdayOptionBuilder.Collect(WeekdayOptions);
+            tt.CalendarWeekdays = WeekdayOptionBuilder.Collect(WeekdayOptions);
         }
 
         /// <summary>点「确定」时兜底再同步一次，保证模型与界面一致</summary>

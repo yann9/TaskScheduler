@@ -30,11 +30,11 @@
             </StackPanel>
         </Border>
 
-        <!-- ===== 时间触发 ===== -->
+        <!-- ===== 时间触发：三类统一计划规则 ===== -->
         <Border Style="{StaticResource Card}"
                 Visibility="{Binding SelectedTriggerType, Converter={StaticResource EnumVis}, ConverterParameter=Time}">
             <StackPanel>
-                <TextBlock Style="{StaticResource CardTitle}" Text="时间计划"/>
+                <TextBlock Style="{StaticResource CardTitle}" Text="计划规则"/>
 
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -54,45 +54,49 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <!-- 方式 -->
-                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="重复方式"/>
+                    <!-- 规则类型 -->
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="规则类型"/>
                     <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
                         <ComboBox Width="170" ItemsSource="{Binding TimeKinds}" SelectedItem="{Binding TriggerKind}"
                                   ItemTemplate="{StaticResource EnumItem}"/>
                         <CheckBox Content="错过时补跑" IsChecked="{Binding TimeTriggerObj.RunIfMissed}" Margin="16,4,0,8"
-                                  ToolTip="引擎启动（开机 / 重启 / 重开程序）时，如果这一次的计划时间已经过去、且从未执行过，立即补执行一次。&#10;适合「每天备份」这类必须完成的活；领券、发日报这类过了点就没意义的任务不要勾。&#10;对 每天 / 每周 / 一次性 / 间隔 / 每月 / 时间段内随机 均有效（依据存档的下次执行时间判断）。"/>
+                                  ToolTip="引擎启动（开机 / 重启 / 重开程序）时，如果这一次的计划时间已经过去、且从未执行过，立即补执行一次。&#10;适合「每天备份」这类必须完成的活；领券、发日报这类过了点就没意义的任务不要勾。&#10;对三类规则均有效（依据存档的下次执行时间判断）。"/>
                     </StackPanel>
 
-                    <!-- 一次性 -->
-                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="执行时间"
-                               Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=OneTime}"/>
-                    <TextBox Grid.Row="1" Grid.Column="1"
-                             Text="{Binding TimeTriggerObj.TargetTime, Converter={StaticResource DtConv}, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="格式 yyyy-MM-dd HH:mm，例如 2026-10-01 09:00。&#10;输入不合法不会生效（保留原值），避免任务被静默改成「永不执行」。"
-                             Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=OneTime}"/>
+                    <!-- ===== 日历排期：日期规则 × 时刻列表 ===== -->
+                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="日期规则"
+                               Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Calendar}"/>
+                    <ComboBox Grid.Row="1" Grid.Column="1" Width="170" HorizontalAlignment="Left"
+                              ItemsSource="{Binding CalendarDayModes}" SelectedItem="{Binding CalendarDayMode}"
+                              ItemTemplate="{StaticResource EnumItem}"
+                              Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Calendar}"/>
 
-                    <!-- 每天 -->
-                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="执行时刻"
-                               Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Daily}"/>
+                    <!-- 指定日期 -->
+                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="日期列表"
+                               Visibility="{Binding CalendarDayMode, Converter={StaticResource EnumVis}, ConverterParameter=SpecificDates}"/>
+                    <StackPanel Grid.Row="2" Grid.Column="1"
+                                Visibility="{Binding CalendarDayMode, Converter={StaticResource EnumVis}, ConverterParameter=SpecificDates}">
+                        <TextBox Width="320"
+                                 Text="{Binding TimeTriggerObj.CalendarDates, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="多个日期用逗号 / 分号 / 空格分隔，格式 yyyy-MM-dd，例如 2026-12-25,2027-01-01。&#10;非法项自动忽略，重复项自动去重。"/>
+                        <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap"
+                                   Text="列出的每个日期 × 下方时刻列表各执行一次；日期全部过期后任务不再执行（即原来的「一次性」，但支持多个日期）。"/>
+                    </StackPanel>
+
+                    <!-- 每隔 N 天 -->
                     <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal"
-                                Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Daily}">
-                        <TextBox Width="90" Text="{Binding TimeTriggerObj.DailyTime, Converter={StaticResource TsConv}, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Text="每隔" VerticalAlignment="Top" Margin="12,6,8,0" Foreground="#3C4043"/>
-                        <TextBox Width="70" Text="{Binding TimeTriggerObj.DaysInterval, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Text="天（1 = 每天；填 2 表示隔一天跑一次）" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                                Visibility="{Binding CalendarDayMode, Converter={StaticResource EnumVis}, ConverterParameter=EveryNDays}">
+                        <TextBlock Text="每隔" VerticalAlignment="Top" Margin="0,6,8,0" Foreground="#3C4043"/>
+                        <TextBox Width="70" Text="{Binding TimeTriggerObj.CalendarDaysInterval, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="天（1 = 每天；填 2 表示隔一天跑一次，按日历对齐、重启不漂移）"
+                                   VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
                     </StackPanel>
 
-                    <!-- 每周 -->
-                    <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="执行时刻"
-                               Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Weekly}"/>
-                    <TextBox Grid.Row="3" Grid.Column="1" Width="90" HorizontalAlignment="Left"
-                             Text="{Binding TimeTriggerObj.WeeklyTime, Converter={StaticResource TsConv}, UpdateSourceTrigger=PropertyChanged}"
-                             Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Weekly}"/>
-
-                    <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="星期"
-                               Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Weekly}"/>
-                    <ItemsControl Grid.Row="4" Grid.Column="1" ItemsSource="{Binding WeekdayOptions}" Margin="0,4,0,4"
-                                  Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Weekly}">
+                    <!-- 每周：星期勾选 -->
+                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="星期"
+                               Visibility="{Binding CalendarDayMode, Converter={StaticResource EnumVis}, ConverterParameter=Weekly}"/>
+                    <ItemsControl Grid.Row="2" Grid.Column="1" ItemsSource="{Binding WeekdayOptions}" Margin="0,4,0,4"
+                                  Visibility="{Binding CalendarDayMode, Converter={StaticResource EnumVis}, ConverterParameter=Weekly}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <WrapPanel Orientation="Horizontal"/>
@@ -105,10 +109,79 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <!-- 间隔 -->
-                    <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="间隔"
+                    <!-- 每月 -->
+                    <StackPanel Grid.Row="2" Grid.Column="1"
+                                Visibility="{Binding CalendarDayMode, Converter={StaticResource EnumVis}, ConverterParameter=Monthly}">
+                        <ComboBox Width="190" ItemsSource="{Binding MonthlyModes}" SelectedItem="{Binding MonthlyKind}"
+                                  ItemTemplate="{StaticResource EnumItem}"/>
+                        <StackPanel Orientation="Horizontal"
+                                    Visibility="{Binding MonthlyKind, Converter={StaticResource EnumVis}, ConverterParameter=DayOfMonth}">
+                            <TextBox Width="70" Text="{Binding TimeTriggerObj.CalendarMonthlyValue, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Text="日（1–31，遇小月自动落在当月最后一天）" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal"
+                                    Visibility="{Binding MonthlyKind, Converter={StaticResource EnumVis}, ConverterParameter=NthWeekday}">
+                            <ComboBox Width="70" ItemsSource="{Binding MonthlyNthOptions}"
+                                      SelectedItem="{Binding TimeTriggerObj.CalendarMonthlyValue}"/>
+                            <ComboBox Width="96" Margin="8,0,0,8" ItemsSource="{Binding WeekDays}"
+                                      SelectedItem="{Binding TimeTriggerObj.CalendarMonthlyWeekday}"
+                                      ItemTemplate="{StaticResource EnumItem}"/>
+                            <TextBlock Text="（选 5 表示当月最后一个该星期几）" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 日历排期共用的时刻列表 -->
+                    <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="执行时刻"
+                               Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Calendar}"/>
+                    <StackPanel Grid.Row="3" Grid.Column="1"
+                                Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Calendar}">
+                        <TextBox Width="320"
+                                 Text="{Binding TimeTriggerObj.CalendarTimes, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="多个时刻用逗号 / 分号 / 空格分隔，例如 08:30,12:00:15,18:00。&#10;支持到秒（HH:mm:ss）；非法项自动忽略，重复项自动去重。"/>
+                        <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap"
+                                   Text="上面选中的日期里，每天按这里列出的时刻各执行一次；可精确到秒。"/>
+                    </StackPanel>
+
+                    <!-- ===== 时段内执行：起止时段 × 取值方式 ===== -->
+                    <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="时段"
+                               Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Window}"/>
+                    <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal"
+                                Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Window}">
+                        <TextBox Width="90"
+                                 Text="{Binding TimeTriggerObj.WindowStart, Converter={StaticResource TsConv}, ConverterParameter=sec, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="起始时刻，格式 HH:mm 或 HH:mm:ss。"/>
+                        <TextBlock Text="至" VerticalAlignment="Top" Margin="12,6,8,0" Foreground="#3C4043"/>
+                        <TextBox Width="90"
+                                 Text="{Binding TimeTriggerObj.WindowEnd, Converter={StaticResource TsConv}, ConverterParameter=sec, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="结束时刻。小于等于起始时刻表示跨午夜延续到次日；与起始时刻相等为整整 24 小时。"/>
+                        <TextBlock Text="，每隔" VerticalAlignment="Top" Margin="12,6,8,0" Foreground="#3C4043"/>
+                        <TextBox Width="60" Text="{Binding TimeTriggerObj.WindowDaysInterval, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="天" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#3C4043"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="取值方式"
+                               Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Window}"/>
+                    <StackPanel Grid.Row="5" Grid.Column="1"
+                                Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Window}">
+                        <ComboBox Width="170" ItemsSource="{Binding WindowModes}" SelectedItem="{Binding WindowMode}"
+                                  ItemTemplate="{StaticResource EnumItem}"/>
+                        <StackPanel Orientation="Horizontal"
+                                    Visibility="{Binding WindowMode, Converter={StaticResource EnumVis}, ConverterParameter=Interval}">
+                            <TextBlock Text="每" VerticalAlignment="Top" Margin="0,6,8,0" Foreground="#3C4043"/>
+                            <TextBox Width="70" Text="{Binding TimeTriggerObj.WindowStepValue, UpdateSourceTrigger=PropertyChanged}"/>
+                            <ComboBox Width="90" Margin="8,0,0,8" ItemsSource="{Binding IntervalUnits}"
+                                      SelectedItem="{Binding TimeTriggerObj.WindowStepUnit}"
+                                      ItemTemplate="{StaticResource EnumItem}"/>
+                            <TextBlock Text="执行一次" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap"
+                                   Text="排期只落在时段内：跨午夜（如 22:00–02:00）和秒级间隔都支持，窗口外不会产生触发。选「随机一点」则每天在窗口内随机挑一个时刻（随机点落盘，重启不重抽）。"/>
+                    </StackPanel>
+
+                    <!-- ===== 连续间隔 ===== -->
+                    <TextBlock Grid.Row="6" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="间隔"
                                Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Interval}"/>
-                    <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal"
+                    <StackPanel Grid.Row="6" Grid.Column="1" Orientation="Horizontal"
                                 Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Interval}">
                         <TextBox Width="80" Text="{Binding TimeTriggerObj.IntervalValue, UpdateSourceTrigger=PropertyChanged}"/>
                         <ComboBox Width="90" Margin="8,0,0,8" ItemsSource="{Binding IntervalUnits}"
@@ -117,76 +190,23 @@
                         <TextBlock Text="循环一次" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
                     </StackPanel>
 
-                    <TextBlock Grid.Row="6" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="首次执行"
+                    <TextBlock Grid.Row="7" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="首次执行"
                                Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Interval}"/>
-                    <ComboBox Grid.Row="6" Grid.Column="1" Width="190" HorizontalAlignment="Left"
+                    <ComboBox Grid.Row="7" Grid.Column="1" Width="190" HorizontalAlignment="Left"
                               ItemsSource="{Binding FirstRunModes}" SelectedItem="{Binding FirstRunMode}"
                               ItemTemplate="{StaticResource EnumItem}"
                               ToolTip="只对「从没排期过」的新任务生效。&#10;一旦排过期，之后一律沿用存档的下次执行时间 —— 重启 / 开机都不会重新计时；改动间隔后保存，会按新设置从当前时刻重新排期（不会再次立即执行）。&#10;想开机 / 程序启动后马上跑一次，选「立即执行一次」；想等网络、磁盘就绪再跑，选「延迟后执行」。"
                               Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Interval}"/>
 
-                    <TextBlock Grid.Row="7" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="首次延迟"
+                    <TextBlock Grid.Row="8" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="首次延迟"
                                Visibility="{Binding FirstRunMode, Converter={StaticResource EnumVis}, ConverterParameter=AfterDelay}"/>
-                    <StackPanel Grid.Row="7" Grid.Column="1" Orientation="Horizontal"
+                    <StackPanel Grid.Row="8" Grid.Column="1" Orientation="Horizontal"
                                 Visibility="{Binding FirstRunMode, Converter={StaticResource EnumVis}, ConverterParameter=AfterDelay}">
                         <TextBox Width="70" Text="{Binding TimeTriggerObj.FirstRunDelayValue, UpdateSourceTrigger=PropertyChanged}"/>
                         <ComboBox Width="90" Margin="8,0,0,8" ItemsSource="{Binding IntervalUnits}"
                                   SelectedItem="{Binding TimeTriggerObj.FirstRunDelayUnit}"
                                   ItemTemplate="{StaticResource EnumItem}"/>
                         <TextBlock Text="后执行首次" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
-                    </StackPanel>
-
-                    <!-- 每月 -->
-                    <TextBlock Grid.Row="8" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="每月方式"
-                               Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Monthly}"/>
-                    <StackPanel Grid.Row="8" Grid.Column="1"
-                                Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Monthly}">
-                        <StackPanel Orientation="Horizontal">
-                            <ComboBox Width="190" ItemsSource="{Binding MonthlyModes}" SelectedItem="{Binding MonthlyKind}"
-                                      ItemTemplate="{StaticResource EnumItem}"/>
-                        </StackPanel>
-
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,0"
-                                    Visibility="{Binding MonthlyKind, Converter={StaticResource EnumVis}, ConverterParameter=DayOfMonth}">
-                            <TextBox Width="70" Text="{Binding TimeTriggerObj.MonthlyDay, UpdateSourceTrigger=PropertyChanged}"/>
-                            <TextBlock Text="日（1–31，遇小月自动落在当月最后一天）" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
-                        </StackPanel>
-
-                        <StackPanel Orientation="Horizontal"
-                                    Visibility="{Binding MonthlyKind, Converter={StaticResource EnumVis}, ConverterParameter=NthWeekday}">
-                            <ComboBox Width="70" ItemsSource="{Binding MonthlyNthOptions}"
-                                      SelectedItem="{Binding TimeTriggerObj.MonthlyNth}"/>
-                            <ComboBox Width="96" Margin="8,0,0,8" ItemsSource="{Binding WeekDays}"
-                                      SelectedItem="{Binding TimeTriggerObj.MonthlyWeekday}"
-                                      ItemTemplate="{StaticResource EnumItem}"/>
-                            <TextBlock Text="（选 5 表示当月最后一个该星期几）" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
-                        </StackPanel>
-
-                        <StackPanel Orientation="Horizontal">
-                            <TextBox Width="90" Text="{Binding TimeTriggerObj.MonthlyTime, Converter={StaticResource TsConv}, UpdateSourceTrigger=PropertyChanged}"/>
-                            <TextBlock Text="执行时刻" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#777777"/>
-                        </StackPanel>
-                    </StackPanel>
-
-                    <!-- 时间段内随机（第 9 行）：起止时刻 + 每隔 N 天，Hint 位于右侧内容列 -->
-                    <TextBlock Grid.Row="9" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="随机时段"
-                               Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=RandomWindow}"/>
-                    <StackPanel Grid.Row="9" Grid.Column="1"
-                                Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=RandomWindow}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBox Width="90"
-                                     Text="{Binding TimeTriggerObj.RandomWindowStart, Converter={StaticResource TsConv}, UpdateSourceTrigger=PropertyChanged}"
-                                     ToolTip="起始时刻，格式 HH:mm，例如 09:00。"/>
-                            <TextBlock Text="至" VerticalAlignment="Top" Margin="12,6,8,0" Foreground="#3C4043"/>
-                            <TextBox Width="90"
-                                     Text="{Binding TimeTriggerObj.RandomWindowEnd, Converter={StaticResource TsConv}, UpdateSourceTrigger=PropertyChanged}"
-                                     ToolTip="结束时刻，格式 HH:mm。小于等于起始时刻表示跨午夜延续到次日，例如 22:00 至 02:00。"/>
-                            <TextBlock Text="每隔" VerticalAlignment="Top" Margin="12,6,8,0" Foreground="#3C4043"/>
-                            <TextBox Width="60" Text="{Binding TimeTriggerObj.RandomWindowDaysInterval, UpdateSourceTrigger=PropertyChanged}"/>
-                            <TextBlock Text="天" VerticalAlignment="Top" Margin="8,6,0,0" Foreground="#3C4043"/>
-                        </StackPanel>
-                        <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap"
-                                   Text="每天（或每隔 N 天）在起止时间段内随机挑一个时刻执行，支持跨午夜（如 22:00–02:00）；下次执行时间显示的就是本次随机点，重启不会重新抽取；配合「跳过周末/节假日」可只在工作日执行。"/>
                     </StackPanel>
                 </Grid>
             </StackPanel>

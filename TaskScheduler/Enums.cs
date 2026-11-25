@@ -23,7 +23,56 @@
         Monthly,
 
         /// <summary>时间段内随机：每天（或每隔 N 天）在指定的起止时间段内随机挑一个时刻执行，支持跨午夜</summary>
-        RandomWindow
+        RandomWindow,
+
+        /// <summary>指定多个时刻：每天（或每隔 N 天）在列出的多个时刻各执行一次，时刻可精确到秒</summary>
+        MultiTime,
+
+        /// <summary>时间段内间隔：在指定起止时间段内按固定间隔（秒 / 分 / 时）逐点执行，排期本身只在窗口内，不需要"允许时段"条件</summary>
+        WindowInterval,
+
+        /// <summary>
+        /// 统一后的「日历排期」（新模型）：日期规则（指定日期 / 每隔 N 天 / 每周 / 每月） × 执行时刻列表。
+        /// 由旧的一次性 / 每天 / 每周 / 每月 / 指定多个时刻迁移而来。追加在末尾，旧存档数字值不变。
+        /// </summary>
+        Calendar,
+
+        /// <summary>
+        /// 统一后的「时段内执行」（新模型）：时段起止 × 取值方式（随机一点 / 按间隔逐点）。
+        /// 由旧的时间段内随机 / 时间段内间隔迁移而来。追加在末尾，旧存档数字值不变。
+        /// </summary>
+        Window
+    }
+
+    /// <summary>
+    /// 「日历排期」的日期规则：决定在哪几天执行；具体时刻由 TimeTrigger.CalendarTimes 给出。
+    /// 会随任务持久化，新增成员一律追加到末尾。
+    /// </summary>
+    public enum CalendarDayMode
+    {
+        /// <summary>指定日期：列出若干 yyyy-MM-dd，在每个日期的指定时刻执行；过了最后一天就不再执行</summary>
+        SpecificDates,
+
+        /// <summary>每隔 N 天：按绝对日历锚点对齐，与"指定多个时刻"合用</summary>
+        EveryNDays,
+
+        /// <summary>每周：勾选若干星期几</summary>
+        Weekly,
+
+        /// <summary>每月：固定第 N 天 / 第 N 个星期几 / 最后一天</summary>
+        Monthly
+    }
+
+    /// <summary>
+    /// 「时段内执行」的取值方式：在起止时段内如何取执行点。会随任务持久化，新增成员追加末尾。
+    /// </summary>
+    public enum WindowMode
+    {
+        /// <summary>在时段内随机挑一个时刻（随机点落盘，重启不重抽）</summary>
+        Random,
+
+        /// <summary>从时段起点按固定步长逐点执行</summary>
+        Interval
     }
 
     /// <summary>每月触发器的“哪一天”方式</summary>
@@ -123,11 +172,14 @@
         MouseClick
     }
 
-    /// <summary>间隔单位</summary>
+    /// <summary>间隔单位。新增成员一律追加到末尾：会随任务持久化，插在中间会让旧存档的间隔单位错位。</summary>
     public enum IntervalUnit
     {
         Minutes,
-        Hours
+        Hours,
+
+        /// <summary>秒（时段内间隔、普通间隔均可用）</summary>
+        Seconds
     }
 
     /// <summary>

@@ -21,14 +21,29 @@ namespace TaskScheduler.Converters
                 },
                 TimeTriggerKind k => k switch
                 {
-                    TimeTriggerKind.OneTime => "一次性",
-                    TimeTriggerKind.Daily => "每天",
-                    TimeTriggerKind.Weekly => "每周",
-                    TimeTriggerKind.Interval => "间隔循环",
-                    TimeTriggerKind.Monthly => "每月",
-                    TimeTriggerKind.RandomWindow => "时间段内随机",
+                    // 界面上只展示三类统一规则；旧八种是迁移来源，正常不会出现，
+                    // 但仍给出中文名，便于老存档在极少数绕过迁移的路径下可读。
+                    TimeTriggerKind.Calendar => "日历排期",
+                    TimeTriggerKind.Window => "时段内执行",
+                    TimeTriggerKind.Interval => "连续间隔",
+                    TimeTriggerKind.OneTime => "一次性（旧）",
+                    TimeTriggerKind.Daily => "每天（旧）",
+                    TimeTriggerKind.Weekly => "每周（旧）",
+                    TimeTriggerKind.Monthly => "每月（旧）",
+                    TimeTriggerKind.RandomWindow => "时段内随机（旧）",
+                    TimeTriggerKind.MultiTime => "多个时刻（旧）",
+                    TimeTriggerKind.WindowInterval => "时段内间隔（旧）",
                     _ => k.ToString()
                 },
+                CalendarDayMode cd => cd switch
+                {
+                    CalendarDayMode.SpecificDates => "指定日期",
+                    CalendarDayMode.EveryNDays => "每隔 N 天",
+                    CalendarDayMode.Weekly => "每周",
+                    CalendarDayMode.Monthly => "每月",
+                    _ => cd.ToString()
+                },
+                WindowMode wm => wm == WindowMode.Random ? "随机一点" : "按间隔逐点",
                 MonthlyMode mm => mm switch
                 {
                     MonthlyMode.DayOfMonth => "每月第几天",
@@ -90,7 +105,7 @@ namespace TaskScheduler.Converters
                     InputActionKind.MouseClick => "鼠标点击",
                     _ => i.ToString()
                 },
-                IntervalUnit u => u == IntervalUnit.Hours ? "小时" : "分钟",
+                IntervalUnit u => u == IntervalUnit.Hours ? "小时" : u == IntervalUnit.Seconds ? "秒" : "分钟",
                 IntervalFirstRunMode fm => fm switch
                 {
                     IntervalFirstRunMode.AfterInterval => "等一个完整间隔",

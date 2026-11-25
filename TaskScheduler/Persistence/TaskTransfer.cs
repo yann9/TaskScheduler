@@ -54,7 +54,7 @@ namespace TaskScheduler.Persistence
         /// <summary>
         /// 导出到指定文件。返回实际导出的任务数。
         /// 导出的是"配置副本"：Id / 名称 / 启用状态 / 触发器 / 条件 / 动作都保留，
-        /// 但运行历史与本机排期（NextRunTime、HasScheduled、随机窗口锚点）一律清掉 ——
+        /// 但运行历史与本机排期（NextRunTime、HasScheduled、各排期方式的日历锚点）一律清掉 ——
         /// 这些是这台机器的状态，带到别的机器上会让任务看起来"刚跑过 / 已经排到期"。
         /// </summary>
         public static int Export(IEnumerable<AutomationTask> tasks, string path)
@@ -202,8 +202,13 @@ namespace TaskScheduler.Persistence
             {
                 tt.NextRunTime = null;
                 tt.HasScheduled = false;
-                // 「时间段内随机」的锚点是本机排期状态，带过去会让新机器沿用旧日历节奏
+                // 各排期方式的日历锚点是本机排期状态，带过去会让新机器沿用旧日历节奏。
+                // 旧八种的锚点 + 统一后三类的锚点都清掉（历史存档两种字段都可能非空）。
                 tt.RandomWindowAnchorDate = null;
+                tt.MultiTimesAnchorDate = null;
+                tt.WindowIntervalAnchorDate = null;
+                tt.CalendarAnchorDate = null;
+                tt.WindowAnchorDate = null;
             }
             if (t.Conditions == null)
                 t.Conditions = new System.Collections.ObjectModel.ObservableCollection<TaskScheduler.Conditions.ICondition>();
