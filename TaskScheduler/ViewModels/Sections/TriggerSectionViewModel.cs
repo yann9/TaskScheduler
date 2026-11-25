@@ -117,6 +117,32 @@ namespace TaskScheduler.ViewModels.Sections
             }
         }
 
+        // ===== 复合可见性：必须同时满足「规则类型」与「子模式」两个条件 =====
+        // 日历排期的四个子行只绑 CalendarDayMode 是不够的 —— 切换规则类型后
+        // CalendarDayMode 的旧值还保留着（为了切回来时配置不丢），于是"时段内执行"
+        // / "连续间隔"下会冒出"日期列表"等本不该出现的行。这里把 TriggerKind 一并纳入判断。
+        public bool ShowCalendarSpecificDates
+            => TriggerKind == TimeTriggerKind.Calendar && CalendarDayMode == TaskScheduler.CalendarDayMode.SpecificDates;
+        public bool ShowCalendarEveryNDays
+            => TriggerKind == TimeTriggerKind.Calendar && CalendarDayMode == TaskScheduler.CalendarDayMode.EveryNDays;
+        public bool ShowCalendarWeekly
+            => TriggerKind == TimeTriggerKind.Calendar && CalendarDayMode == TaskScheduler.CalendarDayMode.Weekly;
+        public bool ShowCalendarMonthly
+            => TriggerKind == TimeTriggerKind.Calendar && CalendarDayMode == TaskScheduler.CalendarDayMode.Monthly;
+
+        /// <summary>首次延迟只属于「连续间隔」，且仅在首次策略为"延迟后执行"时出现。</summary>
+        public bool ShowIntervalFirstRunDelay
+            => TriggerKind == TimeTriggerKind.Interval && FirstRunMode == IntervalFirstRunMode.AfterDelay;
+
+        private void RaiseCompoundVisibility()
+        {
+            OnPropertyChanged(nameof(ShowCalendarSpecificDates));
+            OnPropertyChanged(nameof(ShowCalendarEveryNDays));
+            OnPropertyChanged(nameof(ShowCalendarWeekly));
+            OnPropertyChanged(nameof(ShowCalendarMonthly));
+            OnPropertyChanged(nameof(ShowIntervalFirstRunDelay));
+        }
+
         /// <summary>
         /// 切换触发器类型时保留各类型下已经填好的配置：切走再切回来，内容还在。
         /// 旧实现直接 new 一个空实例 —— 用户填好"每天 09:00"，顺手切到"每周"看一眼，
@@ -157,6 +183,7 @@ namespace TaskScheduler.ViewModels.Sections
                 OnPropertyChanged(nameof(TimeTriggerObj));
             }
 
+            RaiseCompoundVisibility();
             Host.NotifyStructureChanged();
         }
 
@@ -173,6 +200,7 @@ namespace TaskScheduler.ViewModels.Sections
                 t.CalendarDates = DateTime.Now.Date.AddDays(1).ToString("yyyy-MM-dd");
                 OnPropertyChanged(nameof(TimeTriggerObj));
             }
+            RaiseCompoundVisibility();
             Host.NotifyStructureChanged();
         }
 
@@ -199,6 +227,7 @@ namespace TaskScheduler.ViewModels.Sections
             if (_initializing) return;
             var t = TimeTriggerObj;
             if (t != null && value.HasValue) t.FirstRunMode = value.Value;
+            RaiseCompoundVisibility();
             Host.NotifyStructureChanged();
         }
 
@@ -226,6 +255,7 @@ namespace TaskScheduler.ViewModels.Sections
             WeekdayOptionBuilder.Rebuild(WeekdayOptions, TimeTriggerObj?.CalendarWeekdays, ApplyWeeklyDays);
 
             OnPropertyChanged(nameof(ShowProcessFilter));
+            RaiseCompoundVisibility();
             Refresh();
         }
 
@@ -246,6 +276,7 @@ namespace TaskScheduler.ViewModels.Sections
             // 统一后"每周"的星期勾选落在 CalendarWeekdays；旧 WeeklyDays 仅作迁移来源，
             // 迁移完成后不再被 UI 读写。
             WeekdayOptionBuilder.Rebuild(WeekdayOptions, tt?.CalendarWeekdays, ApplyWeeklyDays);
+            RaiseCompoundVisibility();
         }
 
         /// <summary>把界面上勾的星期写回触发器（勾选一变就调用，不必等点确定）</summary>

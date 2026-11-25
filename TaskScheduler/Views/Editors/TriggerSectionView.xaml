@@ -73,10 +73,10 @@
 
                     <!-- 指定日期 -->
                     <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="日期列表"
-                               Visibility="{Binding CalendarDayMode, Converter={StaticResource EnumVis}, ConverterParameter=SpecificDates}"/>
+                               Visibility="{Binding ShowCalendarSpecificDates, Converter={StaticResource BoolVis}}"/>
                     <StackPanel Grid.Row="2" Grid.Column="1"
-                                Visibility="{Binding CalendarDayMode, Converter={StaticResource EnumVis}, ConverterParameter=SpecificDates}">
-                        <TextBox Width="320"
+                                Visibility="{Binding ShowCalendarSpecificDates, Converter={StaticResource BoolVis}}">
+                        <TextBox Width="320" HorizontalAlignment="Left"
                                  Text="{Binding TimeTriggerObj.CalendarDates, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="多个日期用逗号 / 分号 / 空格分隔，格式 yyyy-MM-dd，例如 2026-12-25,2027-01-01。&#10;非法项自动忽略，重复项自动去重。"/>
                         <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap"
@@ -85,7 +85,7 @@
 
                     <!-- 每隔 N 天 -->
                     <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal"
-                                Visibility="{Binding CalendarDayMode, Converter={StaticResource EnumVis}, ConverterParameter=EveryNDays}">
+                                Visibility="{Binding ShowCalendarEveryNDays, Converter={StaticResource BoolVis}}">
                         <TextBlock Text="每隔" VerticalAlignment="Top" Margin="0,6,8,0" Foreground="#3C4043"/>
                         <TextBox Width="70" Text="{Binding TimeTriggerObj.CalendarDaysInterval, UpdateSourceTrigger=PropertyChanged}"/>
                         <TextBlock Text="天（1 = 每天；填 2 表示隔一天跑一次，按日历对齐、重启不漂移）"
@@ -94,9 +94,9 @@
 
                     <!-- 每周：星期勾选 -->
                     <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="星期"
-                               Visibility="{Binding CalendarDayMode, Converter={StaticResource EnumVis}, ConverterParameter=Weekly}"/>
+                               Visibility="{Binding ShowCalendarWeekly, Converter={StaticResource BoolVis}}"/>
                     <ItemsControl Grid.Row="2" Grid.Column="1" ItemsSource="{Binding WeekdayOptions}" Margin="0,4,0,4"
-                                  Visibility="{Binding CalendarDayMode, Converter={StaticResource EnumVis}, ConverterParameter=Weekly}">
+                                  Visibility="{Binding ShowCalendarWeekly, Converter={StaticResource BoolVis}}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <WrapPanel Orientation="Horizontal"/>
@@ -111,8 +111,8 @@
 
                     <!-- 每月 -->
                     <StackPanel Grid.Row="2" Grid.Column="1"
-                                Visibility="{Binding CalendarDayMode, Converter={StaticResource EnumVis}, ConverterParameter=Monthly}">
-                        <ComboBox Width="190" ItemsSource="{Binding MonthlyModes}" SelectedItem="{Binding MonthlyKind}"
+                                Visibility="{Binding ShowCalendarMonthly, Converter={StaticResource BoolVis}}">
+                        <ComboBox Width="190" HorizontalAlignment="Left" ItemsSource="{Binding MonthlyModes}" SelectedItem="{Binding MonthlyKind}"
                                   ItemTemplate="{StaticResource EnumItem}"/>
                         <StackPanel Orientation="Horizontal"
                                     Visibility="{Binding MonthlyKind, Converter={StaticResource EnumVis}, ConverterParameter=DayOfMonth}">
@@ -135,7 +135,7 @@
                                Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Calendar}"/>
                     <StackPanel Grid.Row="3" Grid.Column="1"
                                 Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Calendar}">
-                        <TextBox Width="320"
+                        <TextBox Width="320" HorizontalAlignment="Left"
                                  Text="{Binding TimeTriggerObj.CalendarTimes, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="多个时刻用逗号 / 分号 / 空格分隔，例如 08:30,12:00:15,18:00。&#10;支持到秒（HH:mm:ss）；非法项自动忽略，重复项自动去重。"/>
                         <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap"
@@ -163,7 +163,7 @@
                                Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Window}"/>
                     <StackPanel Grid.Row="5" Grid.Column="1"
                                 Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Window}">
-                        <ComboBox Width="170" ItemsSource="{Binding WindowModes}" SelectedItem="{Binding WindowMode}"
+                        <ComboBox Width="170" HorizontalAlignment="Left" ItemsSource="{Binding WindowModes}" SelectedItem="{Binding WindowMode}"
                                   ItemTemplate="{StaticResource EnumItem}"/>
                         <StackPanel Orientation="Horizontal"
                                     Visibility="{Binding WindowMode, Converter={StaticResource EnumVis}, ConverterParameter=Interval}">
@@ -199,9 +199,9 @@
                               Visibility="{Binding TriggerKind, Converter={StaticResource EnumVis}, ConverterParameter=Interval}"/>
 
                     <TextBlock Grid.Row="8" Grid.Column="0" Style="{StaticResource FieldLabel}" Text="首次延迟"
-                               Visibility="{Binding FirstRunMode, Converter={StaticResource EnumVis}, ConverterParameter=AfterDelay}"/>
+                               Visibility="{Binding ShowIntervalFirstRunDelay, Converter={StaticResource BoolVis}}"/>
                     <StackPanel Grid.Row="8" Grid.Column="1" Orientation="Horizontal"
-                                Visibility="{Binding FirstRunMode, Converter={StaticResource EnumVis}, ConverterParameter=AfterDelay}">
+                                Visibility="{Binding ShowIntervalFirstRunDelay, Converter={StaticResource BoolVis}}">
                         <TextBox Width="70" Text="{Binding TimeTriggerObj.FirstRunDelayValue, UpdateSourceTrigger=PropertyChanged}"/>
                         <ComboBox Width="90" Margin="8,0,0,8" ItemsSource="{Binding IntervalUnits}"
                                   SelectedItem="{Binding TimeTriggerObj.FirstRunDelayUnit}"

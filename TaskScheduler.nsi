@@ -31,7 +31,7 @@
 ; ---- 其它常量 ----
 !define TS_APP_NAME  "自动化任务调度器"
 !define TS_EXE_NAME  "TaskScheduler.exe"
-!define TS_VERSION   "1.5.0"
+!define TS_VERSION   "1.5.1"
 !define TS_DIR_NAME  "TaskScheduler"
 ; 本程序的卸载键（写入卸载信息用）
 !define UninstallKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\TaskScheduler"
@@ -177,32 +177,9 @@ Function un.onInit
   ${EndIf}
 FunctionEnd
 
-; ---- 目录页校验：防止把应用装进已有其它文件的共享目录 ----
-;   卸载现在只删"我们装的文件"（install_manifest.nsh），所以装进 D:\Tools 也不
-;   会误删人家文件——这里只是 UX 提醒：混装很乱、容易让用户困惑，建议用专属子文件夹。
-;   重装场景（目录里已有我们的 exe）不弹，避免每次升级都打扰。
-Function .onVerifyInstDir
-  ${IfNot} ${FileExists} "$INSTDIR\${TS_EXE_NAME}"
-    StrCpy $R2 0
-    FindFirst $R0 $R1 "$INSTDIR\*.*"
-    ${DoWhile} $R0 != ""
-      ${If} $R1 != "."
-      ${AndIf} $R1 != ".."
-        StrCpy $R2 1
-        ${ExitDo}
-      ${EndIf}
-      FindNext $R0 $R1
-    ${Loop}
-    FindClose $R0
-    ${If} $R2 = 1
-      MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION \
-        "所选目录已包含其它文件。$\n$\n建议新建专属子文件夹（例如：$INSTDIR\${TS_DIR_NAME}）后再安装，避免与其它程序混杂。$\n$\n点击「确定」仍安装到此处；点击「取消」返回重新选择。" \
-        IDOK ts_verify_ok
-      Abort
-      ts_verify_ok:
-    ${EndIf}
-  ${EndIf}
-FunctionEnd
+; 目录页不做非空校验：装进共享目录（如 D:\Tools）不会误删别人文件 ——
+; 卸载只删 install_manifest.nsh 列出的"我们装的文件"，随后的 RMDir 不带 /r，
+; 目录非空时自动跳过。此前的 .onVerifyInstDir 弹窗在升级/重装时反复打扰，已移除。
 
 ; ============================================================================
 ;  选项页（nsDialogs）：三个自定义勾选项
